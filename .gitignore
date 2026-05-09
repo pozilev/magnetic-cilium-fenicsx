@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+venv/
+.env/
+.fenicsx/
+fenicsx010/
+
+# VS Code
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build
+build/
+dist/
+
+# Logs
+*.log
+
+# Paraview / simulation outputs
+results/
+runs/
+output/
+*.pvd
+*.vtu
+*.xdmf
+*.h5
+
+# Temporary
+tmp/
+temp/
+
+# OS
+.DS_Store
