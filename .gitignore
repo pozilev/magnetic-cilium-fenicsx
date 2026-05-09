@@ -44,3 +44,6 @@ temp/
 
 # OS
 .DS_Store
+
+.agents
+.codex

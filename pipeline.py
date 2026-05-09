@@ -30,6 +30,16 @@ from magnetics_dipoles import compute_magnetic_dipole_diagnostics, log_magnetic_
 
 log = logging.getLogger("magnetic_cilium_3d")
 
+DEFAULT_MAGNETIC_ONLY_RESTART_DIR = (
+    "magnetic_cilium_3d_results_final/"
+    "final_P2_hcil_20um_hsub_100um_delta_0p550mm"
+)
+
+MAGNETIC_ONLY_BR_VALUES = [0.02, 0.05, 0.10, 0.15]
+MAGNETIC_ONLY_SENSOR_GAPS = [25e-6, 50e-6, 100e-6]
+MAGNETIC_ONLY_SENSOR_X_FACTORS = [0.0, 0.5, 1.0]
+MAX_STABLE_MAGNETIC_FIELD_T = 10.0
+
 
 def make_json_safe(obj):
     if isinstance(obj, dict):
@@ -125,7 +135,18 @@ def summary_columns() -> List[str]:
         "dB_sensor_x_T", "dB_sensor_y_T", "dB_sensor_z_T", "dB_sensor_norm_T",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
-        "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT", "pvd_file",
+        "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
+        "B_before_x_T", "B_before_y_T", "B_before_z_T", "B_before_norm_T",
+        "B_after_x_T", "B_after_y_T", "B_after_z_T", "B_after_norm_T",
+        "delta_B_x_T", "delta_B_y_T", "delta_B_z_T", "delta_B_norm_T",
+        "relative_delta_B_norm", "sensor_gap_m", "sensor_x_over_R",
+        "Br_T", "gap_m",
+        "Bx_before_T", "By_before_T", "Bz_before_T",
+        "Bx_after_T", "By_after_T", "Bz_after_T",
+        "dBx_T", "dBy_T", "dBz_T",
+        "deltaB_norm_T", "relative_deltaB",
+        "is_valid", "rank_by_deltaB_norm", "rank_by_abs_dBz",
+        "run_params_json", "pvd_file",
     ]
 
 
@@ -278,7 +299,244 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
     return [result]
 
 
+def is_finite_number(value: Any) -> bool:
+    return isinstance(value, (float, int, np.floating, np.integer)) and np.isfinite(float(value))
+
+
+def is_stable_magnetic_result(result: Dict[str, Any], sensor_gap: float) -> bool:
+    if not (0.02 <= float(result["Br_magnetic_T"]) <= 0.15):
+        return False
+    if not (sensor_gap >= 25e-6 and sensor_gap > 0.0):
+        return False
+
+    fields = [
+        "B0_sensor_x_T", "B0_sensor_y_T", "B0_sensor_z_T", "B0_sensor_norm_T",
+        "B1_sensor_x_T", "B1_sensor_y_T", "B1_sensor_z_T", "B1_sensor_norm_T",
+        "dB_sensor_x_T", "dB_sensor_y_T", "dB_sensor_z_T", "dB_sensor_norm_T",
+    ]
+    if any(not is_finite_number(result.get(key)) for key in fields):
+        return False
+    if any(abs(float(result[key])) > MAX_STABLE_MAGNETIC_FIELD_T for key in fields):
+        return False
+    return int(result.get("magnetic_skipped_near_cells", 0)) == 0
+
+
+def add_magnetic_only_aliases(result: Dict[str, Any], sensor_gap: float, sensor_x_over_R: float) -> Dict[str, Any]:
+    b0_norm = float(result["B0_sensor_norm_T"])
+    dB_norm = float(result["dB_sensor_norm_T"])
+    relative_change = dB_norm / b0_norm if abs(b0_norm) > 1e-30 else None
+    result.update(
+        {
+            "B_before_x_T": result["B0_sensor_x_T"],
+            "B_before_y_T": result["B0_sensor_y_T"],
+            "B_before_z_T": result["B0_sensor_z_T"],
+            "B_before_norm_T": result["B0_sensor_norm_T"],
+            "B_after_x_T": result["B1_sensor_x_T"],
+            "B_after_y_T": result["B1_sensor_y_T"],
+            "B_after_z_T": result["B1_sensor_z_T"],
+            "B_after_norm_T": result["B1_sensor_norm_T"],
+            "delta_B_x_T": result["dB_sensor_x_T"],
+            "delta_B_y_T": result["dB_sensor_y_T"],
+            "delta_B_z_T": result["dB_sensor_z_T"],
+            "delta_B_norm_T": result["dB_sensor_norm_T"],
+            "relative_delta_B_norm": relative_change,
+            "sensor_gap_m": sensor_gap,
+            "sensor_x_over_R": sensor_x_over_R,
+            "Br_T": result["Br_magnetic_T"],
+            "gap_m": sensor_gap,
+            "Bx_before_T": result["B0_sensor_x_T"],
+            "By_before_T": result["B0_sensor_y_T"],
+            "Bz_before_T": result["B0_sensor_z_T"],
+            "Bx_after_T": result["B1_sensor_x_T"],
+            "By_after_T": result["B1_sensor_y_T"],
+            "Bz_after_T": result["B1_sensor_z_T"],
+            "dBx_T": result["dB_sensor_x_T"],
+            "dBy_T": result["dB_sensor_y_T"],
+            "dBz_T": result["dB_sensor_z_T"],
+            "deltaB_norm_T": result["dB_sensor_norm_T"],
+            "relative_deltaB": relative_change,
+            "is_valid": is_stable_magnetic_result(result, sensor_gap),
+        }
+    )
+    return result
+
+
+def rank_magnetic_only_results(results: List[Dict[str, Any]]) -> None:
+    valid_results = [r for r in results if r.get("is_valid")]
+
+    for rank, result in enumerate(
+        sorted(valid_results, key=lambda r: float(r["deltaB_norm_T"]), reverse=True),
+        start=1,
+    ):
+        result["rank_by_deltaB_norm"] = rank
+
+    for rank, result in enumerate(
+        sorted(valid_results, key=lambda r: abs(float(r["dBz_T"])), reverse=True),
+        start=1,
+    ):
+        result["rank_by_abs_dBz"] = rank
+
+    for result in results:
+        result.setdefault("rank_by_deltaB_norm", "")
+        result.setdefault("rank_by_abs_dBz", "")
+
+
+def write_magnetic_only_run_jsons(
+    results: List[Dict[str, Any]],
+    base_outdir: str,
+    restart_dir: str,
+    mechanics_result: Dict[str, Any],
+) -> None:
+    for result in results:
+        run_id = int(result["run"])
+        params_json = os.path.join(base_outdir, f"magnetic_only_run_{run_id:03d}.json")
+        run_payload = {
+            "run": run_id,
+            "study": result["study"],
+            "restart_dir": restart_dir,
+            "restart_file": result["restart_file"],
+            "mechanics_result": mechanics_result,
+            "params": result.get("_params", {}),
+            "magnetic_result": {k: v for k, v in result.items() if k != "run_params_json" and not k.startswith("_")},
+        }
+        with open(params_json, "w", encoding="utf-8") as f:
+            json.dump(make_json_safe(run_payload), f, indent=2)
+        result["run_params_json"] = params_json
+
+
+def write_best_magnetic_configurations(results: List[Dict[str, Any]], base_outdir: str) -> None:
+    valid_results = [r for r in results if r.get("is_valid")]
+    best_by_norm = next((r for r in valid_results if r.get("rank_by_deltaB_norm") == 1), None)
+    best_by_abs_dBz = next((r for r in valid_results if r.get("rank_by_abs_dBz") == 1), None)
+    public_best_by_norm = {k: v for k, v in best_by_norm.items() if not k.startswith("_")} if best_by_norm else None
+    public_best_by_abs_dBz = {k: v for k, v in best_by_abs_dBz.items() if not k.startswith("_")} if best_by_abs_dBz else None
+    output = {
+        "criterion": "maximize deltaB_norm_T among valid magnetic-only configurations",
+        "validity": {
+            "Br_T_range": [0.02, 0.15],
+            "min_gap_m": 25e-6,
+            "max_abs_field_T": MAX_STABLE_MAGNETIC_FIELD_T,
+            "requires_finite_values": True,
+            "requires_no_skipped_near_cells": True,
+        },
+        "best_by_deltaB_norm": public_best_by_norm,
+        "best_by_abs_dBz": public_best_by_abs_dBz,
+    }
+    best_path = os.path.join(base_outdir, "magnetic_best_configurations.json")
+    with open(best_path, "w", encoding="utf-8") as f:
+        json.dump(make_json_safe(output), f, indent=2)
+    if best_by_norm:
+        log.info(
+            "best magnetic configuration by |delta_B|: run=%03d, Br=%.3e T, gap=%.3e m, sensor_x=%.3e m, |delta_B|=%.6e T",
+            best_by_norm["run"], best_by_norm["Br_T"], best_by_norm["gap_m"],
+            best_by_norm["sensor_x_m"], best_by_norm["deltaB_norm_T"],
+        )
+    if best_by_abs_dBz:
+        log.info(
+            "best Hall Bz configuration by |dBz|: run=%03d, Br=%.3e T, gap=%.3e m, sensor_x=%.3e m, |dBz|=%.6e T",
+            best_by_abs_dBz["run"], best_by_abs_dBz["Br_T"], best_by_abs_dBz["gap_m"],
+            best_by_abs_dBz["sensor_x_m"], abs(best_by_abs_dBz["dBz_T"]),
+        )
+
+
+def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
+    restart_dir = args.restart_dir or DEFAULT_MAGNETIC_ONLY_RESTART_DIR
+    if not os.path.exists(os.path.join(restart_dir, "mechanics_restart.npz")):
+        parent_restart_dir = os.path.join("..", restart_dir)
+        if os.path.exists(os.path.join(parent_restart_dir, "mechanics_restart.npz")):
+            restart_dir = parent_restart_dir
+
+    domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(restart_dir)
+    log.info("magnetic-only: restart_dir = %s", restart_dir)
+    log.info("magnetic-only: saved params = %s", asdict(saved_params))
+    if mechanics_result:
+        log.info(
+            "mechanical validation: max_top_u_x=%.9e m, reaction=%.9e N (%.6f uN), J=[%.9e, %.9e], von_mises_max=%.9e Pa",
+            mechanics_result.get("max_top_u_x_m", float("nan")),
+            mechanics_result.get("reaction_force_x_N", float("nan")),
+            mechanics_result.get("reaction_force_x_uN", float("nan")),
+            mechanics_result.get("J_min", float("nan")),
+            mechanics_result.get("J_max", float("nan")),
+            mechanics_result.get("von_mises_max_Pa", float("nan")),
+        )
+    base_outdir = args.outdir or "magnetic_cilium_3d_results_final"
+    if args.outdir == "magnetic_cilium_3d_results_final":
+        restart_parent = os.path.dirname(os.path.normpath(restart_dir))
+        if os.path.basename(restart_parent) == "magnetic_cilium_3d_results_final":
+            base_outdir = restart_parent
+    os.makedirs(base_outdir, exist_ok=True)
+    log.info(
+        "magnetic sweep parameters: Br=%s T, gap=%s m, sensor_x/R=%s",
+        MAGNETIC_ONLY_BR_VALUES,
+        MAGNETIC_ONLY_SENSOR_GAPS,
+        MAGNETIC_ONLY_SENSOR_X_FACTORS,
+    )
+
+    results: List[Dict[str, Any]] = []
+    run_id = 1
+    for Br in MAGNETIC_ONLY_BR_VALUES:
+        for sensor_gap in MAGNETIC_ONLY_SENSOR_GAPS:
+            for sensor_x_factor in MAGNETIC_ONLY_SENSOR_X_FACTORS:
+                params_dict = asdict(saved_params)
+                params_dict["Br_magnetic"] = Br
+                params_dict["sensor_x"] = sensor_x_factor * saved_params.R
+                params_dict["sensor_y"] = 0.0
+                params_dict["sensor_z"] = -sensor_gap
+                params_dict["rotate_magnetization"] = saved_params.rotate_magnetization
+                params_dict["outdir"] = base_outdir
+                params = ModelParams(**params_dict)
+
+                result = run_magnetics_case_from_objects(domain, material, u_vertices, params, mechanics_result)
+                result["run"] = run_id
+                result["study"] = "magnetic_only_validation"
+                result["restart_file"] = os.path.join(restart_dir, "mechanics_restart.npz")
+                result["_params"] = asdict(params)
+                add_magnetic_only_aliases(result, sensor_gap, sensor_x_factor)
+                log.info(
+                    "magnetic run %03d: Br=%.3e T, gap=%.3e m, sensor=[%.3e, %.3e, %.3e] m",
+                    run_id,
+                    result["Br_T"],
+                    result["gap_m"],
+                    result["sensor_x_m"],
+                    result["sensor_y_m"],
+                    result["sensor_z_m"],
+                )
+                log.info(
+                    "magnetic run %03d: B_before=[%.6e, %.6e, %.6e] T, B_after=[%.6e, %.6e, %.6e] T",
+                    run_id,
+                    result["Bx_before_T"],
+                    result["By_before_T"],
+                    result["Bz_before_T"],
+                    result["Bx_after_T"],
+                    result["By_after_T"],
+                    result["Bz_after_T"],
+                )
+                log.info(
+                    "magnetic run %03d: delta_B=[%.6e, %.6e, %.6e] T, |delta_B|=%.6e T, relative=%s, valid=%s",
+                    run_id,
+                    result["dBx_T"],
+                    result["dBy_T"],
+                    result["dBz_T"],
+                    result["deltaB_norm_T"],
+                    result["relative_deltaB"],
+                    result["is_valid"],
+                )
+
+                results.append(result)
+                run_id += 1
+
+    rank_magnetic_only_results(results)
+    write_magnetic_only_run_jsons(results, base_outdir, restart_dir, mechanics_result)
+    write_best_magnetic_configurations(results, base_outdir)
+    summary_path = os.path.join(base_outdir, "magnetic_validation_summary.csv")
+    write_summary(results, summary_path)
+    print_summary(results, summary_path)
+    return results
+
+
 def run_single_pipeline_case(args) -> List[Dict[str, Any]]:
+    if args.mode == "magnetic-only":
+        raise RuntimeError("Internal guard: magnetic-only mode must not enter the mechanics/full pipeline.")
     base_outdir = args.outdir
     os.makedirs(base_outdir, exist_ok=True)
     run_name = (

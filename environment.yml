@@ -13,3 +13,4 @@ dependencies:
   - matplotlib
   - meshio
   - h5py
+  - pyyaml

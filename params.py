@@ -1,10 +1,15 @@
 import argparse
 import logging
+import os
 import sys
 from dataclasses import dataclass
 
-import dolfinx
-from mpi4py import MPI
+try:
+    import dolfinx
+    from mpi4py import MPI
+except ModuleNotFoundError:
+    dolfinx = None
+    MPI = None
 
 
 TARGET_REACTION_U_N = 60.0
@@ -54,6 +59,9 @@ class ModelParams:
 
 
 def check_runtime(log: logging.Logger) -> None:
+    if dolfinx is None or MPI is None:
+        raise RuntimeError("DOLFINx/MPI runtime is not available. Activate the FEniCSx environment before running solves.")
+
     if MPI.COMM_WORLD.size != 1:
         raise RuntimeError("Run serially only: python main.py")
 
@@ -64,42 +72,81 @@ def check_runtime(log: logging.Logger) -> None:
         log.warning("Expected DOLFINx 0.10.x, got %s", dolfinx.__version__)
 
 
+def load_yaml_config(path: str) -> dict:
+    try:
+        import yaml
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("PyYAML is required for --config. Install the pyyaml package.") from exc
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Config must be a YAML mapping: {path}")
+
+    config = {str(key).replace("-", "_"): value for key, value in data.items()}
+    if "Br_magnetic" in config and "Br" not in config:
+        config["Br"] = config["Br_magnetic"]
+    if "delta_x" in config and "delta" not in config:
+        config["delta"] = config["delta_x"]
+    if "rotate_magnetization" in config and "no_rotate_magnetization" not in config:
+        config["no_rotate_magnetization"] = not bool(config["rotate_magnetization"])
+    return config
+
+
+def load_config_defaults(config_path: str | None) -> dict:
+    if config_path is None:
+        return {}
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    return load_yaml_config(config_path)
+
+
 def parse_args():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config", default=None, help="YAML config file with CLI defaults.")
+    pre_args, _ = pre_parser.parse_known_args()
+    config_defaults = load_config_defaults(pre_args.config)
+
+    def cfg(name, default):
+        return config_defaults.get(name, default)
+
     parser = argparse.ArgumentParser(
-        description="Pipeline 3D hyperelastic FEM + dipole magnetic postprocessor for a double-layer magnetic cilium."
+        description="Pipeline 3D hyperelastic FEM + dipole magnetic postprocessor for a double-layer magnetic cilium.",
+        parents=[pre_parser],
     )
 
     parser.add_argument(
         "--mode",
-        choices=["validation", "final", "full", "mechanics", "magnetics"],
-        default="validation",
-        help="validation: sweeps; full/final: mechanics+magnetics; mechanics: save restart; magnetics: read restart.",
+        choices=["validation", "final", "full", "mechanics", "magnetics", "magnetic-only"],
+        default=cfg("mode", "validation"),
+        help="validation: sweeps; full/final: mechanics+magnetics; mechanics: save restart; magnetics/magnetic-only: read restart.",
     )
-    parser.add_argument("--outdir", default=None)
-    parser.add_argument("--restart-dir", default=None)
+    parser.add_argument("--outdir", default=cfg("outdir", None))
+    parser.add_argument("--restart-dir", default=cfg("restart_dir", None))
 
     # Geometry
-    parser.add_argument("--D", type=float, default=120e-6, help="Cilium diameter, m.")
-    parser.add_argument("--L1", type=float, default=2e-3, help="Lower PDMS layer length, m.")
-    parser.add_argument("--L2", type=float, default=2e-3, help="Upper magnetic layer length, m.")
-    parser.add_argument("--substrate-radius", type=float, default=0.60e-3, help="Substrate radius, m.")
-    parser.add_argument("--substrate-thickness", type=float, default=0.50e-3, help="Substrate thickness, m.")
+    parser.add_argument("--D", type=float, default=cfg("D", 120e-6), help="Cilium diameter, m.")
+    parser.add_argument("--L1", type=float, default=cfg("L1", 2e-3), help="Lower PDMS layer length, m.")
+    parser.add_argument("--L2", type=float, default=cfg("L2", 2e-3), help="Upper magnetic layer length, m.")
+    parser.add_argument("--substrate-radius", type=float, default=cfg("substrate_radius", 0.60e-3), help="Substrate radius, m.")
+    parser.add_argument("--substrate-thickness", type=float, default=cfg("substrate_thickness", 0.50e-3), help="Substrate thickness, m.")
 
     # Mechanics and mesh
-    parser.add_argument("--delta", type=float, default=0.32e-3)
-    parser.add_argument("--mesh-delta", type=float, default=0.32e-3)
-    parser.add_argument("--h-cilium", type=float, default=30e-6)
-    parser.add_argument("--h-substrate", type=float, default=100e-6)
-    parser.add_argument("--nu", type=float, default=0.49)
-    parser.add_argument("--n-steps", type=int, default=12)
-    parser.add_argument("--include-h20", action="store_true")
+    parser.add_argument("--delta", type=float, default=cfg("delta", 0.32e-3))
+    parser.add_argument("--mesh-delta", type=float, default=cfg("mesh_delta", 0.32e-3))
+    parser.add_argument("--h-cilium", type=float, default=cfg("h_cilium", 30e-6))
+    parser.add_argument("--h-substrate", type=float, default=cfg("h_substrate", 100e-6))
+    parser.add_argument("--nu", type=float, default=cfg("nu", 0.49))
+    parser.add_argument("--n-steps", type=int, default=cfg("n_steps", 12))
+    parser.add_argument("--include-h20", action="store_true", default=cfg("include_h20", False))
 
     # Magnetics
-    parser.add_argument("--Br", type=float, default=0.10, help="Effective remanence, T.")
-    parser.add_argument("--sensor-x", type=float, default=0.0)
-    parser.add_argument("--sensor-y", type=float, default=0.0)
-    parser.add_argument("--sensor-z", type=float, default=-50e-6, help="Use --sensor-z=-50e-6 for negative values.")
-    parser.add_argument("--no-rotate-magnetization", action="store_true")
+    parser.add_argument("--Br", type=float, default=cfg("Br", 0.10), help="Effective remanence, T.")
+    parser.add_argument("--sensor-x", type=float, default=cfg("sensor_x", 0.0))
+    parser.add_argument("--sensor-y", type=float, default=cfg("sensor_y", 0.0))
+    parser.add_argument("--sensor-z", type=float, default=cfg("sensor_z", -50e-6), help="Use --sensor-z=-50e-6 for negative values.")
+    parser.add_argument("--no-rotate-magnetization", dest="no_rotate_magnetization", action="store_true", default=cfg("no_rotate_magnetization", False))
+    parser.add_argument("--rotate-magnetization", dest="no_rotate_magnetization", action="store_false")
 
     args = parser.parse_args()
 
