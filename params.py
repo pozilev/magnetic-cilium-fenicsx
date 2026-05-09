@@ -117,7 +117,7 @@ def parse_args():
 
     parser.add_argument(
         "--mode",
-        choices=["validation", "final", "full", "mechanics", "magnetics", "magnetic-only"],
+        choices=["validation", "final", "full", "mechanics", "magnetics", "magnetic-only", "magnetic-validation"],
         default=cfg("mode", "validation"),
         help="validation: sweeps; full/final: mechanics+magnetics; mechanics: save restart; magnetics/magnetic-only: read restart.",
     )
@@ -147,11 +147,14 @@ def parse_args():
     parser.add_argument("--sensor-z", type=float, default=cfg("sensor_z", -50e-6), help="Use --sensor-z=-50e-6 for negative values.")
     parser.add_argument("--no-rotate-magnetization", dest="no_rotate_magnetization", action="store_true", default=cfg("no_rotate_magnetization", False))
     parser.add_argument("--rotate-magnetization", dest="no_rotate_magnetization", action="store_false")
+    parser.add_argument("--target-sensitivity-uT-per-uN", type=float, default=cfg("target_sensitivity_uT_per_uN", 1.0))
 
     args = parser.parse_args()
 
     if args.mode == "final":
         args.mode = "full"
+    if args.mode == "magnetic-validation":
+        args.mode = "magnetic-only"
 
     if args.outdir is None:
         if args.mode == "validation":

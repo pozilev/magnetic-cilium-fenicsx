@@ -36,7 +36,7 @@ DEFAULT_MAGNETIC_ONLY_RESTART_DIR = (
 )
 
 MAGNETIC_ONLY_BR_VALUES = [0.02, 0.05, 0.10, 0.15]
-MAGNETIC_ONLY_SENSOR_GAPS = [25e-6, 50e-6, 100e-6]
+MAGNETIC_ONLY_SENSOR_GAPS = [0, 25e-6, 50e-6, 100e-6, 200e-6]
 MAGNETIC_ONLY_SENSOR_X_FACTORS = [0.0, 0.5, 1.0]
 MAX_STABLE_MAGNETIC_FIELD_T = 10.0
 
@@ -145,6 +145,9 @@ def summary_columns() -> List[str]:
         "Bx_after_T", "By_after_T", "Bz_after_T",
         "dBx_T", "dBy_T", "dBz_T",
         "deltaB_norm_T", "relative_deltaB",
+        "abs_dB_x_uT", "abs_dB_z_uT", "dominant_component", "sensor_y_over_R",
+        "target_sensitivity_uT_per_uN", "required_Br_for_target_x_T",
+        "required_Br_for_target_z_T", "required_Br_for_target_norm_T",
         "is_valid", "rank_by_deltaB_norm", "rank_by_abs_dBz",
         "run_params_json", "pvd_file",
     ]
@@ -321,10 +324,26 @@ def is_stable_magnetic_result(result: Dict[str, Any], sensor_gap: float) -> bool
     return int(result.get("magnetic_skipped_near_cells", 0)) == 0
 
 
-def add_magnetic_only_aliases(result: Dict[str, Any], sensor_gap: float, sensor_x_over_R: float) -> Dict[str, Any]:
+def required_Br_for_target(current_Br: float, signal_uT: float, target_signal_uT: float) -> float | None:
+    if abs(signal_uT) <= 1e-30:
+        return None
+    return current_Br * target_signal_uT / abs(signal_uT)
+
+
+def add_magnetic_only_aliases(
+    result: Dict[str, Any],
+    sensor_gap: float,
+    sensor_x_over_R: float,
+    sensor_y_over_R: float,
+    target_sensitivity_uT_per_uN: float,
+) -> Dict[str, Any]:
     b0_norm = float(result["B0_sensor_norm_T"])
     dB_norm = float(result["dB_sensor_norm_T"])
     relative_change = dB_norm / b0_norm if abs(b0_norm) > 1e-30 else None
+    reaction_uN = float(result.get("reaction_force_x_uN", 0.0) or 0.0)
+    target_signal_uT = target_sensitivity_uT_per_uN * reaction_uN
+    abs_dBx_uT = abs(float(result["dB_sensor_x_uT"]))
+    abs_dBz_uT = abs(float(result["dB_sensor_z_uT"]))
     result.update(
         {
             "B_before_x_T": result["B0_sensor_x_T"],
@@ -355,6 +374,20 @@ def add_magnetic_only_aliases(result: Dict[str, Any], sensor_gap: float, sensor_
             "dBz_T": result["dB_sensor_z_T"],
             "deltaB_norm_T": result["dB_sensor_norm_T"],
             "relative_deltaB": relative_change,
+            "abs_dB_x_uT": abs_dBx_uT,
+            "abs_dB_z_uT": abs_dBz_uT,
+            "dominant_component": "x" if abs_dBx_uT >= abs_dBz_uT else "z",
+            "sensor_y_over_R": sensor_y_over_R,
+            "target_sensitivity_uT_per_uN": target_sensitivity_uT_per_uN,
+            "required_Br_for_target_x_T": required_Br_for_target(
+                float(result["Br_magnetic_T"]), float(result["dB_sensor_x_uT"]), target_signal_uT
+            ),
+            "required_Br_for_target_z_T": required_Br_for_target(
+                float(result["Br_magnetic_T"]), float(result["dB_sensor_z_uT"]), target_signal_uT
+            ),
+            "required_Br_for_target_norm_T": required_Br_for_target(
+                float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
+            ),
             "is_valid": is_stable_magnetic_result(result, sensor_gap),
         }
     )
@@ -379,6 +412,59 @@ def rank_magnetic_only_results(results: List[Dict[str, Any]]) -> None:
     for result in results:
         result.setdefault("rank_by_deltaB_norm", "")
         result.setdefault("rank_by_abs_dBz", "")
+
+
+def best_valid_result(results: List[Dict[str, Any]], key: str, use_abs: bool) -> Dict[str, Any] | None:
+    valid_results = [r for r in results if r.get("is_valid")]
+    if not valid_results:
+        return None
+    if use_abs:
+        return max(valid_results, key=lambda r: abs(float(r[key])))
+    return max(valid_results, key=lambda r: float(r[key]))
+
+
+def print_best_magnetic_validation(results: List[Dict[str, Any]], target_sensitivity_uT_per_uN: float) -> None:
+    best_x = best_valid_result(results, "dB_sensor_x_uT", use_abs=True)
+    best_z = best_valid_result(results, "dB_sensor_z_uT", use_abs=True)
+    best_norm = best_valid_result(results, "dB_sensor_norm_uT", use_abs=False)
+    best_rows = [
+        ("max_abs_dBx", best_x),
+        ("max_abs_dBz", best_z),
+        ("max_norm_dB", best_norm),
+    ]
+
+    print("\n=== BEST MAGNETIC VALIDATION CONFIGURATIONS ===")
+    for label, row in best_rows:
+        if row is None:
+            print(f"{label}: no valid magnetic result")
+            continue
+        print(
+            f"{label}: Br={row['Br_T']:.3e} T, gap={row['gap_m'] * 1e6:.1f} um, "
+            f"sensor_x/R={row['sensor_x_over_R']:.3g}, sensor_y/R={row['sensor_y_over_R']:.3g}, "
+            f"dBx={row['dB_sensor_x_uT']:.6g} uT, dBz={row['dB_sensor_z_uT']:.6g} uT, "
+            f"|dB|={row['dB_sensor_norm_uT']:.6g} uT, "
+            f"required_Br_x={row['required_Br_for_target_x_T']}, "
+            f"required_Br_z={row['required_Br_for_target_z_T']}, "
+            f"required_Br_norm={row['required_Br_for_target_norm_T']}"
+        )
+
+    reaction_uN = max((float(r.get("reaction_force_x_uN", 0.0) or 0.0) for r in results), default=0.0)
+    best_signal = max(
+        [
+            abs(float(best_x["dB_sensor_x_uT"])) if best_x else 0.0,
+            abs(float(best_z["dB_sensor_z_uT"])) if best_z else 0.0,
+            float(best_norm["dB_sensor_norm_uT"]) if best_norm else 0.0,
+        ]
+    )
+    sensitivity = best_signal / reaction_uN if reaction_uN > 0.0 else None
+    if sensitivity is None:
+        print("best achievable sensitivity: unavailable")
+        return
+    ratio = sensitivity / target_sensitivity_uT_per_uN if target_sensitivity_uT_per_uN > 0.0 else None
+    print(
+        f"best achievable sensitivity: {sensitivity:.6g} uT/uN "
+        f"(target={target_sensitivity_uT_per_uN:.6g} uT/uN, ratio={ratio})"
+    )
 
 
 def write_magnetic_only_run_jsons(
@@ -406,8 +492,13 @@ def write_magnetic_only_run_jsons(
 
 def write_best_magnetic_configurations(results: List[Dict[str, Any]], base_outdir: str) -> None:
     valid_results = [r for r in results if r.get("is_valid")]
+    best_by_abs_dBx = best_valid_result(results, "dB_sensor_x_uT", use_abs=True)
+    best_by_abs_dBz = best_valid_result(results, "dB_sensor_z_uT", use_abs=True)
     best_by_norm = next((r for r in valid_results if r.get("rank_by_deltaB_norm") == 1), None)
-    best_by_abs_dBz = next((r for r in valid_results if r.get("rank_by_abs_dBz") == 1), None)
+    best_by_rank_abs_dBz = next((r for r in valid_results if r.get("rank_by_abs_dBz") == 1), None)
+    if best_by_abs_dBz is None:
+        best_by_abs_dBz = best_by_rank_abs_dBz
+    public_best_by_abs_dBx = {k: v for k, v in best_by_abs_dBx.items() if not k.startswith("_")} if best_by_abs_dBx else None
     public_best_by_norm = {k: v for k, v in best_by_norm.items() if not k.startswith("_")} if best_by_norm else None
     public_best_by_abs_dBz = {k: v for k, v in best_by_abs_dBz.items() if not k.startswith("_")} if best_by_abs_dBz else None
     output = {
@@ -419,6 +510,7 @@ def write_best_magnetic_configurations(results: List[Dict[str, Any]], base_outdi
             "requires_finite_values": True,
             "requires_no_skipped_near_cells": True,
         },
+        "best_by_abs_dBx": public_best_by_abs_dBx,
         "best_by_deltaB_norm": public_best_by_norm,
         "best_by_abs_dBz": public_best_by_abs_dBz,
     }
@@ -431,11 +523,17 @@ def write_best_magnetic_configurations(results: List[Dict[str, Any]], base_outdi
             best_by_norm["run"], best_by_norm["Br_T"], best_by_norm["gap_m"],
             best_by_norm["sensor_x_m"], best_by_norm["deltaB_norm_T"],
         )
+    if best_by_abs_dBx:
+        log.info(
+            "best Hall Bx configuration by |dBx|: run=%03d, Br=%.3e T, gap=%.3e m, sensor_x/R=%.3f, |dBx|=%.6e uT",
+            best_by_abs_dBx["run"], best_by_abs_dBx["Br_T"], best_by_abs_dBx["gap_m"],
+            best_by_abs_dBx["sensor_x_over_R"], abs(best_by_abs_dBx["dB_sensor_x_uT"]),
+        )
     if best_by_abs_dBz:
         log.info(
-            "best Hall Bz configuration by |dBz|: run=%03d, Br=%.3e T, gap=%.3e m, sensor_x=%.3e m, |dBz|=%.6e T",
+            "best Hall Bz configuration by |dBz|: run=%03d, Br=%.3e T, gap=%.3e m, sensor_x/R=%.3f, |dBz|=%.6e uT",
             best_by_abs_dBz["run"], best_by_abs_dBz["Br_T"], best_by_abs_dBz["gap_m"],
-            best_by_abs_dBz["sensor_x_m"], abs(best_by_abs_dBz["dBz_T"]),
+            best_by_abs_dBz["sensor_x_over_R"], abs(best_by_abs_dBz["dB_sensor_z_uT"]),
         )
 
 
@@ -466,10 +564,11 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
             base_outdir = restart_parent
     os.makedirs(base_outdir, exist_ok=True)
     log.info(
-        "magnetic sweep parameters: Br=%s T, gap=%s m, sensor_x/R=%s",
+        "magnetic sweep parameters: Br=%s T, gap=%s m, sensor_x/R=%s, target_sensitivity=%.6g uT/uN",
         MAGNETIC_ONLY_BR_VALUES,
         MAGNETIC_ONLY_SENSOR_GAPS,
         MAGNETIC_ONLY_SENSOR_X_FACTORS,
+        args.target_sensitivity_uT_per_uN,
     )
 
     results: List[Dict[str, Any]] = []
@@ -491,7 +590,13 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
                 result["study"] = "magnetic_only_validation"
                 result["restart_file"] = os.path.join(restart_dir, "mechanics_restart.npz")
                 result["_params"] = asdict(params)
-                add_magnetic_only_aliases(result, sensor_gap, sensor_x_factor)
+                add_magnetic_only_aliases(
+                    result,
+                    sensor_gap,
+                    sensor_x_factor,
+                    0.0,
+                    args.target_sensitivity_uT_per_uN,
+                )
                 log.info(
                     "magnetic run %03d: Br=%.3e T, gap=%.3e m, sensor=[%.3e, %.3e, %.3e] m",
                     run_id,
@@ -531,6 +636,7 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
     summary_path = os.path.join(base_outdir, "magnetic_validation_summary.csv")
     write_summary(results, summary_path)
     print_summary(results, summary_path)
+    print_best_magnetic_validation(results, args.target_sensitivity_uT_per_uN)
     return results
 
 
