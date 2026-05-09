@@ -23,6 +23,12 @@ dist/
 # Logs
 *.log
 
+# LaTeX sources and final PDFs
+magnetic_cilium_tex/*
+!magnetic_cilium_tex/**/
+!magnetic_cilium_tex/*.tex
+!magnetic_cilium_tex/*.pdf
+
 # Paraview / simulation outputs
 results/
 runs/

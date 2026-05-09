@@ -1,0 +1,15 @@
+name: fenicsx010
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - fenics-dolfinx=0.10.0
+  - gmsh
+  - python-gmsh
+  - numpy
+  - mpi4py
+  - petsc4py
+  - pyvista
+  - matplotlib
+  - meshio
+  - h5py
