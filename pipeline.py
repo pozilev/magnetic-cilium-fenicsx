@@ -340,11 +340,13 @@ def magnetic_fem_summary_columns() -> List[str]:
         "air_radius_factor", "air_below_factor", "air_above_factor",
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
         "h_air_near_m", "h_air_far_m", "near_radius_factor",
+        "near_source_padding_factor", "near_sensor_padding_factor", "near_radius_m", "near_radius_over_R",
         "air_cells", "air_vertices",
         "initial_source_cells", "deformed_source_cells",
         "source_cells_initial", "source_cells_deformed",
         "source_volume_initial_m3", "source_volume_deformed_m3", "reference_magnetic_volume_m3",
         "source_volume_error_initial_percent", "source_volume_error_deformed_percent",
+        "source_projection_ok", "source_projection_warning",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
         "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
@@ -371,6 +373,12 @@ def print_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> Non
         f"(points={result['sensor_average_points_used']}, radius={result['sensor_average_radius_m']} m)"
     )
     print(f"air mesh = {result['air_cells']} tetrahedra, {result['air_vertices']} vertices")
+    print(
+        "near mesh = "
+        f"radius:{result['near_radius_m']:.6g} m "
+        f"({result['near_radius_over_R']:.6g} R), "
+        f"h_near:{result['h_air_near_m']:.6g} m, h_far:{result['h_air_far_m']:.6g} m"
+    )
     print(
         "source volume error = "
         f"initial:{result['source_volume_error_initial_percent']:.6g}%, "
@@ -489,6 +497,8 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         h_air_near=float(params.get("h_air_near", params.get("h_air", 100e-6))),
         h_air_far=float(params.get("h_air_far", 3.0 * float(params.get("h_air", 100e-6)))),
         near_radius_factor=float(params.get("near_radius_factor", 3.0)),
+        near_source_padding_factor=float(params.get("near_source_padding_factor", 2.0)),
+        near_sensor_padding_factor=float(params.get("near_sensor_padding_factor", 1.0)),
         magnetic_boundary=str(params.get("magnetic_boundary", "natural")),
         sensor_average=bool(params.get("sensor_average", False)),
         sensor_average_radius=float(params.get("sensor_average_radius", 25e-6)),

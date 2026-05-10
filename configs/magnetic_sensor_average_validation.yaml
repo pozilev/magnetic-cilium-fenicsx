@@ -24,6 +24,8 @@ fixed_physical_parameters:
   h_air_near: 75.0e-6
   h_air_far: 225.0e-6
   near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
   air_radius_factor: 12.0
   air_below_factor: 8.0
   air_above_factor: 4.0

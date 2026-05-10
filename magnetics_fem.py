@@ -29,7 +29,7 @@ def build_air_box_mesh(
         h_air: float,
         h_air_near: float,
         h_air_far: float,
-        near_radius_factor: float,
+        near_radius: float,
         max_air_cells: int,
         allow_large_air_mesh: bool,
     ):
@@ -48,7 +48,7 @@ def build_air_box_mesh(
         gmsh.model.occ.synchronize()
         h_near = float(h_air_near)
         h_far = max(float(h_air_far), h_near)
-        near_radius = float(near_radius_factor) * params.R
+        near_radius = float(near_radius)
         gmsh.option.setNumber("Mesh.CharacteristicLengthMin", h_near)
         gmsh.option.setNumber("Mesh.CharacteristicLengthMax", h_far)
         box_field = gmsh.model.mesh.field.add("Box")
@@ -310,6 +310,19 @@ def compute_air_box_dimensions(params: ModelParams, initial_tets: np.ndarray, de
     return air_radius, air_below, air_above
 
 
+def compute_near_field_radius(params: ModelParams, initial_tets: np.ndarray, deformed_tets: np.ndarray, sensor_point: np.ndarray, args) -> float:
+    all_source_points = np.vstack([initial_tets.reshape((-1, 3)), deformed_tets.reshape((-1, 3))])
+    source_xy_radius = float(np.max(np.linalg.norm(all_source_points[:, :2], axis=1)))
+    sensor_xy_radius = float(np.linalg.norm(sensor_point[:2])) + (
+        float(args.sensor_average_radius) if bool(args.sensor_average) else 0.0
+    )
+    return max(
+        float(args.near_radius_factor) * params.R,
+        source_xy_radius + float(args.near_source_padding_factor) * params.R,
+        sensor_xy_radius + float(args.near_sensor_padding_factor) * params.R,
+    )
+
+
 def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices, saved_params: ModelParams, mechanics_result: Dict[str, Any], args) -> Dict[str, Any]:
     params_dict = asdict(saved_params)
     params_dict["Br_magnetic"] = args.Br
@@ -329,10 +342,12 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     initial_tets, initial_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=False)
     deformed_tets, deformed_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=True)
     air_radius, air_below, air_above = compute_air_box_dimensions(params, initial_tets, deformed_tets, args)
+    near_radius = compute_near_field_radius(params, initial_tets, deformed_tets, sensor_point, args)
+    near_radius = min(near_radius, air_radius)
 
     log.info(
-        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, h_near=%.6e m, h_far=%.6e m, near_radius_factor=%.3f, boundary=%s",
-        air_radius, air_below, air_above, args.h_air, args.h_air_near, args.h_air_far, args.near_radius_factor, args.magnetic_boundary,
+        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, h_near=%.6e m, h_far=%.6e m, near_radius=%.6e m, boundary=%s",
+        air_radius, air_below, air_above, args.h_air, args.h_air_near, args.h_air_far, near_radius, args.magnetic_boundary,
     )
     log.info(
         "magnetics-fem: sensor_average=%s, sample_points=%d, max_air_cells=%d",
@@ -347,7 +362,7 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         args.h_air,
         args.h_air_near,
         args.h_air_far,
-        args.near_radius_factor,
+        near_radius,
         int(args.max_air_cells),
         bool(args.allow_large_air_mesh),
     )
@@ -374,6 +389,8 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         reference_volume = float(np.pi * params.R**2 * params.L2)
     source_volume_error0 = 100.0 * abs(source_volume0 - reference_volume) / reference_volume
     source_volume_error1 = 100.0 * abs(source_volume1 - reference_volume) / reference_volume
+    source_projection_ok = max(source_volume_error0, source_volume_error1) <= 5.0
+    source_projection_warning = max(source_volume_error0, source_volume_error1) > 20.0
     if source_volume_error0 > 20.0 or source_volume_error1 > 20.0:
         log.warning(
             "Magnetic source volume projection error is large: initial=%.3f%%, deformed=%.3f%%",
@@ -401,6 +418,10 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "h_air_near_m": args.h_air_near,
         "h_air_far_m": args.h_air_far,
         "near_radius_factor": args.near_radius_factor,
+        "near_source_padding_factor": args.near_source_padding_factor,
+        "near_sensor_padding_factor": args.near_sensor_padding_factor,
+        "near_radius_m": near_radius,
+        "near_radius_over_R": near_radius / params.R if params.R > 0.0 else "",
         "air_cells": air_cells,
         "air_vertices": air_vertices,
         "initial_source_cells": tagged0,
@@ -412,6 +433,8 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "reference_magnetic_volume_m3": reference_volume,
         "source_volume_error_initial_percent": source_volume_error0,
         "source_volume_error_deformed_percent": source_volume_error1,
+        "source_projection_ok": source_projection_ok,
+        "source_projection_warning": source_projection_warning,
         "B0_sensor_x_uT": B0[0] * 1e6,
         "B0_sensor_y_uT": B0[1] * 1e6,
         "B0_sensor_z_uT": B0[2] * 1e6,

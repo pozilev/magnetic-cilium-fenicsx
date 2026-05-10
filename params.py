@@ -179,6 +179,8 @@ def parse_args():
     parser.add_argument("--h-air-near", type=float, default=cfg("h_air_near", None))
     parser.add_argument("--h-air-far", type=float, default=cfg("h_air_far", None))
     parser.add_argument("--near-radius-factor", type=float, default=cfg("near_radius_factor", 3.0))
+    parser.add_argument("--near-source-padding-factor", type=float, default=cfg("near_source_padding_factor", 2.0))
+    parser.add_argument("--near-sensor-padding-factor", type=float, default=cfg("near_sensor_padding_factor", 1.0))
     parser.add_argument("--magnetic-boundary", choices=["dirichlet_zero", "natural"], default=cfg("magnetic_boundary", "natural"))
     parser.add_argument("--sensor-average", action="store_true", default=cfg("sensor_average", False))
     parser.add_argument("--sensor-average-radius", type=float, default=cfg("sensor_average_radius", 25e-6))

@@ -24,6 +24,8 @@ global:
   sensor_average_radius: 25.0e-6
   sensor_average_n: 5
   near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
   max_air_cells: 700000
 
 fixed_physical_parameters:
