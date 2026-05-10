@@ -129,6 +129,7 @@ def summary_columns() -> List[str]:
         "volume_substrate_m3", "volume_lower_m3", "volume_upper_m3", "expected_layer_volume_m3",
         "lower_volume_rel_error_percent", "upper_volume_rel_error_percent", "restart_file",
         "Br_magnetic_T", "M_magnetic_A_per_m", "sensor_x_m", "sensor_y_m", "sensor_z_m", "rotate_magnetization",
+        "sensor_average", "sensor_average_radius_m", "sensor_average_n", "sensor_average_points_used",
         "magnetic_dipole_cells", "magnetic_dipole_volume_m3", "magnetic_initial_volume_m3", "magnetic_deformed_volume_m3",
         "magnetic_min_distance_to_sensor_m", "magnetic_skipped_near_cells",
         "B0_sensor_x_T", "B0_sensor_y_T", "B0_sensor_z_T", "B0_sensor_norm_T",
@@ -263,15 +264,33 @@ def run_mechanics_case(params: ModelParams, run_id: int, study: str) -> Dict[str
     return result
 
 
-def run_magnetics_case_from_objects(domain, material, u_vertices: np.ndarray, params: ModelParams, base_result: Dict[str, Any]) -> Dict[str, Any]:
+def run_magnetics_case_from_objects(
+        domain,
+        material,
+        u_vertices: np.ndarray,
+        params: ModelParams,
+        base_result: Dict[str, Any],
+        sensor_average: bool = False,
+        sensor_average_radius: float = 25e-6,
+        sensor_average_n: int = 5,
+    ) -> Dict[str, Any]:
     log.info("=" * 80)
     log.info("MAGNETICS POSTPROCESSING")
     log.info("Br_magnetic = %.6e T", params.Br_magnetic)
     log.info("sensor point = [%.6e, %.6e, %.6e] m", params.sensor_x, params.sensor_y, params.sensor_z)
+    log.info("sensor_average = %s, radius = %.6e m, n = %d", sensor_average, sensor_average_radius, sensor_average_n)
     log.info("rotate_magnetization = %s", params.rotate_magnetization)
     log.info("=" * 80)
 
-    magnetic_diag = compute_magnetic_dipole_diagnostics(domain, u_vertices, material, params)
+    magnetic_diag = compute_magnetic_dipole_diagnostics(
+        domain,
+        u_vertices,
+        material,
+        params,
+        sensor_average=sensor_average,
+        sensor_average_radius=sensor_average_radius,
+        sensor_average_n=sensor_average_n,
+    )
     log_magnetic_diagnostics(magnetic_diag)
     result = {k: v for k, v in base_result.items() if not k.startswith("_")}
     result.update(magnetic_diag)
@@ -293,7 +312,16 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
         raise RuntimeError("--restart-dir is required for --mode magnetics")
     domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(args.restart_dir)
     params = override_magnetic_params(saved_params, args)
-    result = run_magnetics_case_from_objects(domain, material, u_vertices, params, mechanics_result)
+    result = run_magnetics_case_from_objects(
+        domain,
+        material,
+        u_vertices,
+        params,
+        mechanics_result,
+        sensor_average=bool(args.sensor_average),
+        sensor_average_radius=float(args.sensor_average_radius),
+        sensor_average_n=int(args.sensor_average_n),
+    )
     result["study"] = "magnetics_from_restart"
     outdir = args.outdir if args.outdir is not None else args.restart_dir
     os.makedirs(outdir, exist_ok=True)
@@ -311,6 +339,7 @@ def magnetic_fem_summary_columns() -> List[str]:
         "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R",
         "air_radius_factor", "air_below_factor", "air_above_factor",
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
+        "h_air_near_m", "h_air_far_m", "near_radius_factor",
         "air_cells", "air_vertices",
         "initial_source_cells", "deformed_source_cells",
         "source_cells_initial", "source_cells_deformed",
@@ -457,6 +486,9 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         air_below_factor=float(params.get("air_below_factor", 4.0)),
         air_above_factor=float(params.get("air_above_factor", 4.0)),
         h_air=float(params.get("h_air", 100e-6)),
+        h_air_near=float(params.get("h_air_near", params.get("h_air", 100e-6))),
+        h_air_far=float(params.get("h_air_far", 3.0 * float(params.get("h_air", 100e-6)))),
+        near_radius_factor=float(params.get("near_radius_factor", 3.0)),
         magnetic_boundary=str(params.get("magnetic_boundary", "natural")),
         sensor_average=bool(params.get("sensor_average", False)),
         sensor_average_radius=float(params.get("sensor_average_radius", 25e-6)),

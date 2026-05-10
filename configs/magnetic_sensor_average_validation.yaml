@@ -1,0 +1,46 @@
+# Sensor averaging validation for magnetostatic FEM.
+#
+# This sweep keeps the air box and graded mesh fixed and changes only the
+# sensor averaging radius. It is intended to diagnose how much of the Hall
+# signal depends on finite sensor area rather than on the field solve.
+
+global:
+  mode: magnetics-fem
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_sensor_average_results
+  validation_summary_csv: magnetic_sensor_average_validation_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_n: 5
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  Br: 0.15
+  sensor_x_over_r: 1.0
+  sensor_y_over_r: 0.0
+  sensor_z: 0.0
+  rotate_magnetization: true
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  air_radius_factor: 12.0
+  air_below_factor: 8.0
+  air_above_factor: 4.0
+
+sweep:
+  sensor_average_radius:
+    fixed: {}
+    cases:
+      - id: rs_10um
+        description: "Sensor averaging radius = 10 um"
+        sensor_average_radius: 10.0e-6
+      - id: rs_25um
+        description: "Sensor averaging radius = 25 um"
+        sensor_average_radius: 25.0e-6
+      - id: rs_50um
+        description: "Sensor averaging radius = 50 um"
+        sensor_average_radius: 50.0e-6
+      - id: rs_75um
+        description: "Sensor averaging radius = 75 um"
+        sensor_average_radius: 75.0e-6

@@ -15,6 +15,7 @@ from dolfinx.fem import petsc as fem_petsc
 from magnetics_dipoles import compute_cell_deformation_gradient_P1, rotation_from_deformation_gradient
 from mechanics_model import create_dolfinx_mesh_3d
 from params import ModelParams
+from sensor_sampling import make_sensor_sample_points
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -26,6 +27,9 @@ def build_air_box_mesh(
         air_below: float,
         air_above: float,
         h_air: float,
+        h_air_near: float,
+        h_air_far: float,
+        near_radius_factor: float,
         max_air_cells: int,
         allow_large_air_mesh: bool,
     ):
@@ -42,8 +46,21 @@ def build_air_box_mesh(
             params.L + air_above + air_below,
         )
         gmsh.model.occ.synchronize()
-        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", h_air)
-        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", h_air)
+        h_near = float(h_air_near)
+        h_far = max(float(h_air_far), h_near)
+        near_radius = float(near_radius_factor) * params.R
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", h_near)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", h_far)
+        box_field = gmsh.model.mesh.field.add("Box")
+        gmsh.model.mesh.field.setNumber(box_field, "VIn", h_near)
+        gmsh.model.mesh.field.setNumber(box_field, "VOut", h_far)
+        gmsh.model.mesh.field.setNumber(box_field, "XMin", -near_radius)
+        gmsh.model.mesh.field.setNumber(box_field, "XMax", near_radius)
+        gmsh.model.mesh.field.setNumber(box_field, "YMin", -near_radius)
+        gmsh.model.mesh.field.setNumber(box_field, "YMax", near_radius)
+        gmsh.model.mesh.field.setNumber(box_field, "ZMin", -air_below)
+        gmsh.model.mesh.field.setNumber(box_field, "ZMax", params.L + air_above)
+        gmsh.model.mesh.field.setAsBackgroundMesh(box_field)
         gmsh.option.setNumber("Mesh.Algorithm3D", 1)
         gmsh.model.mesh.generate(3)
 
@@ -277,27 +294,6 @@ def gradient_at_point(domain, V, phi_h, point: np.ndarray) -> np.ndarray:
     return np.linalg.solve(A.T, b)
 
 
-def make_sensor_sample_points(sensor_point: np.ndarray, average: bool, radius: float, n: int) -> np.ndarray:
-    if not average:
-        return np.asarray([sensor_point], dtype=np.float64)
-    if radius <= 0.0:
-        raise RuntimeError("--sensor-average-radius must be positive when --sensor-average is used.")
-    if n < 1:
-        raise RuntimeError("--sensor-average-n must be >= 1.")
-    if n == 1:
-        return np.asarray([sensor_point], dtype=np.float64)
-
-    offsets = np.linspace(-radius, radius, n)
-    points = []
-    for dx in offsets:
-        for dy in offsets:
-            if dx * dx + dy * dy <= radius * radius + 1e-30:
-                points.append([sensor_point[0] + dx, sensor_point[1] + dy, sensor_point[2]])
-    if not points:
-        raise RuntimeError("Sensor averaging produced no sample points.")
-    return np.asarray(points, dtype=np.float64)
-
-
 def compute_air_box_dimensions(params: ModelParams, initial_tets: np.ndarray, deformed_tets: np.ndarray, args) -> Tuple[float, float, float]:
     requested_radius = args.air_radius_factor * params.R
     requested_below = args.air_below_factor * params.R
@@ -335,8 +331,8 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     air_radius, air_below, air_above = compute_air_box_dimensions(params, initial_tets, deformed_tets, args)
 
     log.info(
-        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, boundary=%s",
-        air_radius, air_below, air_above, args.h_air, args.magnetic_boundary,
+        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, h_near=%.6e m, h_far=%.6e m, near_radius_factor=%.3f, boundary=%s",
+        air_radius, air_below, air_above, args.h_air, args.h_air_near, args.h_air_far, args.near_radius_factor, args.magnetic_boundary,
     )
     log.info(
         "magnetics-fem: sensor_average=%s, sample_points=%d, max_air_cells=%d",
@@ -349,6 +345,9 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         air_below,
         air_above,
         args.h_air,
+        args.h_air_near,
+        args.h_air_far,
+        args.near_radius_factor,
         int(args.max_air_cells),
         bool(args.allow_large_air_mesh),
     )
@@ -399,6 +398,9 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "air_below_m": air_below,
         "air_above_m": air_above,
         "h_air_m": args.h_air,
+        "h_air_near_m": args.h_air_near,
+        "h_air_far_m": args.h_air_far,
+        "near_radius_factor": args.near_radius_factor,
         "air_cells": air_cells,
         "air_vertices": air_vertices,
         "initial_source_cells": tagged0,

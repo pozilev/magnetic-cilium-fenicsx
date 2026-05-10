@@ -5,6 +5,7 @@ import numpy as np
 from mpi4py import MPI
 
 from params import ModelParams
+from sensor_sampling import make_sensor_sample_points
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -34,11 +35,33 @@ def compute_cell_deformation_gradient_P1(X: np.ndarray, u_values: np.ndarray) ->
     return np.eye(3) + grad_u
 
 
-def compute_B_from_magnetic_layer_dipoles(domain, u_vertices: np.ndarray, material, params: ModelParams, deformed: bool):
+def dipole_field_at_point(sensor_point: np.ndarray, centroid: np.ndarray, m_cell: np.ndarray) -> np.ndarray:
+    mu0 = 4.0 * np.pi * 1e-7
+    Rvec = sensor_point - centroid
+    Rnorm = float(np.linalg.norm(Rvec))
+    if Rnorm < 1e-12:
+        return np.full(3, np.nan, dtype=np.float64)
+    R2 = Rnorm * Rnorm
+    R3 = R2 * Rnorm
+    R5 = R3 * R2
+    return (mu0 / (4.0 * np.pi)) * (3.0 * Rvec * np.dot(m_cell, Rvec) / R5 - m_cell / R3)
+
+
+def compute_B_from_magnetic_layer_dipoles(
+        domain,
+        u_vertices: np.ndarray,
+        material,
+        params: ModelParams,
+        deformed: bool,
+        sensor_average: bool = False,
+        sensor_average_radius: float = 25e-6,
+        sensor_average_n: int = 5,
+    ):
     mu0 = 4.0 * np.pi * 1e-7
     M0_abs = params.Br_magnetic / mu0
     M0_ref = np.array([0.0, 0.0, M0_abs], dtype=np.float64)
     sensor_point = np.array([params.sensor_x, params.sensor_y, params.sensor_z], dtype=np.float64)
+    sensor_points = make_sensor_sample_points(sensor_point, sensor_average, sensor_average_radius, sensor_average_n)
 
     tdim = domain.topology.dim
     num_cells = domain.topology.index_map(tdim).size_local
@@ -52,7 +75,7 @@ def compute_B_from_magnetic_layer_dipoles(domain, u_vertices: np.ndarray, materi
         raise RuntimeError(f"u_vertices length mismatch: got {u_vertices.shape[0]}, expected {X_vertices.shape[0]}.")
 
     Q = material.function_space
-    B_total = np.zeros(3, dtype=np.float64)
+    B_total = np.zeros((sensor_points.shape[0], 3), dtype=np.float64)
     magnetic_cells = 0
     magnetic_volume = 0.0
     skipped_near_cells = 0
@@ -87,23 +110,20 @@ def compute_B_from_magnetic_layer_dipoles(domain, u_vertices: np.ndarray, materi
         centroid = np.mean(x_cell, axis=0)
         m_cell = M_cell * V_cell
 
-        Rvec = sensor_point - centroid
-        Rnorm = float(np.linalg.norm(Rvec))
-        min_R = min(min_R, Rnorm)
-        if Rnorm < eps:
+        Rnorm_min_cell = float(np.min(np.linalg.norm(sensor_points - centroid, axis=1)))
+        min_R = min(min_R, Rnorm_min_cell)
+        if Rnorm_min_cell < eps:
             skipped_near_cells += 1
             continue
 
-        R2 = Rnorm * Rnorm
-        R3 = R2 * Rnorm
-        R5 = R3 * R2
-        B_cell = (mu0 / (4.0 * np.pi)) * (3.0 * Rvec * np.dot(m_cell, Rvec) / R5 - m_cell / R3)
-        B_total += B_cell
+        for i, point in enumerate(sensor_points):
+            B_total[i, :] += dipole_field_at_point(point, centroid, m_cell)
         magnetic_cells += 1
         magnetic_volume += V_cell
 
-    B_global = np.zeros(3, dtype=np.float64)
-    domain.comm.Allreduce(B_total, B_global, op=MPI.SUM)
+    B_global_samples = np.zeros_like(B_total)
+    domain.comm.Allreduce(B_total, B_global_samples, op=MPI.SUM)
+    B_global = np.mean(B_global_samples, axis=0)
 
     diagnostics = {
         "sensor_x_m": sensor_point[0],
@@ -111,6 +131,10 @@ def compute_B_from_magnetic_layer_dipoles(domain, u_vertices: np.ndarray, materi
         "sensor_z_m": sensor_point[2],
         "Br_magnetic_T": params.Br_magnetic,
         "M_magnetic_A_per_m": M0_abs,
+        "sensor_average": bool(sensor_average),
+        "sensor_average_radius_m": float(sensor_average_radius),
+        "sensor_average_n": int(sensor_average_n),
+        "sensor_average_points_used": int(sensor_points.shape[0]),
         "magnetic_dipole_cells": domain.comm.allreduce(magnetic_cells, op=MPI.SUM),
         "magnetic_dipole_volume_m3": domain.comm.allreduce(magnetic_volume, op=MPI.SUM),
         "magnetic_min_distance_to_sensor_m": domain.comm.allreduce(min_R, op=MPI.MIN),
@@ -119,9 +143,27 @@ def compute_B_from_magnetic_layer_dipoles(domain, u_vertices: np.ndarray, materi
     return B_global, diagnostics
 
 
-def compute_magnetic_dipole_diagnostics(domain, u_vertices: np.ndarray, material, params: ModelParams) -> Dict:
-    B0, diag0 = compute_B_from_magnetic_layer_dipoles(domain, u_vertices, material, params, deformed=False)
-    B1, diag1 = compute_B_from_magnetic_layer_dipoles(domain, u_vertices, material, params, deformed=True)
+def compute_magnetic_dipole_diagnostics(
+        domain,
+        u_vertices: np.ndarray,
+        material,
+        params: ModelParams,
+        sensor_average: bool = False,
+        sensor_average_radius: float = 25e-6,
+        sensor_average_n: int = 5,
+    ) -> Dict:
+    B0, diag0 = compute_B_from_magnetic_layer_dipoles(
+        domain, u_vertices, material, params, deformed=False,
+        sensor_average=sensor_average,
+        sensor_average_radius=sensor_average_radius,
+        sensor_average_n=sensor_average_n,
+    )
+    B1, diag1 = compute_B_from_magnetic_layer_dipoles(
+        domain, u_vertices, material, params, deformed=True,
+        sensor_average=sensor_average,
+        sensor_average_radius=sensor_average_radius,
+        sensor_average_n=sensor_average_n,
+    )
     dB = B1 - B0
 
     diagnostics = dict(diag1)

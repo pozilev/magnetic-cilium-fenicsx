@@ -3,13 +3,13 @@
 # Purpose:
 # - check convergence of the scalar-potential magnetostatic FEM postprocessor;
 # - separate numerical effects from the physical model;
-# - verify whether B0, B1, and dB stabilize as h_air is refined and the air box grows.
+# - verify whether B0, B1, and dB stabilize as the graded air mesh and air box change.
 #
 # Notes:
 # - The mechanical solution is already validated and is loaded only from restart.
 # - Default boundary mode is natural with one gauge dof for phi.
 # - Sensor averaging is enabled to reduce point-sampling sensitivity.
-# - Air box size is swept because the artificial boundary can bias the near field.
+# - Air box size is swept because natural boundary is not an exact open boundary.
 # - sensor_x_over_r = 1.0 is used because previous dipole validation found the largest
 #   signal near sensor_x ~= +R, with dBx as the dominant component.
 # - Convergence is indicated by stabilization of dB, especially dBx and |dB|.
@@ -23,6 +23,7 @@ global:
   sensor_average: true
   sensor_average_radius: 25.0e-6
   sensor_average_n: 5
+  near_radius_factor: 3.0
   max_air_cells: 700000
 
 fixed_physical_parameters:
@@ -34,58 +35,61 @@ fixed_physical_parameters:
 
 sweep:
   # A. Air mesh convergence.
-  # Expected: B0, B1, and dB should approach stable values as h_air decreases.
+  # h_air=150 um is excluded from quantitative validation because the previous
+  # run showed a large source volume error. In this graded mesh, h_air is the
+  # near-field target size; the far field is coarsened by h_air_far.
   h_air_convergence:
     fixed:
       air_radius_factor: 8.0
       air_below_factor: 4.0
       air_above_factor: 4.0
     cases:
-      - id: h_air_150um
-        description: "Air mesh convergence, h_air=150 um"
-        h_air: 150.0e-6
       - id: h_air_100um
-        description: "Air mesh convergence, h_air=100 um"
+        description: "Graded air mesh convergence, h_near=100 um"
         h_air: 100.0e-6
+        h_air_near: 100.0e-6
+        h_air_far: 300.0e-6
       - id: h_air_75um
-        description: "Air mesh convergence, h_air=75 um"
+        description: "Graded air mesh convergence, h_near=75 um"
         h_air: 75.0e-6
+        h_air_near: 75.0e-6
+        h_air_far: 225.0e-6
       - id: h_air_50um
-        description: "Air mesh convergence, h_air=50 um"
+        description: "Graded air mesh convergence, h_near=50 um"
         h_air: 50.0e-6
+        h_air_near: 50.0e-6
+        h_air_far: 150.0e-6
 
   # B. Lateral air box convergence.
-  # Expected: dB should stabilize as side boundaries move away from the cilium.
+  # Main laptop-safe comparison: 12R <-> 16R.
   air_radius_convergence:
     fixed:
-      h_air: 50.0e-6
-      air_below_factor: 4.0
+      h_air: 75.0e-6
+      h_air_near: 75.0e-6
+      h_air_far: 225.0e-6
+      air_below_factor: 8.0
       air_above_factor: 4.0
     cases:
-      - id: air_radius_8R
-        description: "Air box lateral convergence, air_radius_factor=8"
-        air_radius_factor: 8.0
       - id: air_radius_12R
-        description: "Air box lateral convergence, air_radius_factor=12"
+        description: "Graded air box lateral convergence, air_radius_factor=12"
         air_radius_factor: 12.0
       - id: air_radius_16R
-        description: "Air box lateral convergence, air_radius_factor=16"
+        description: "Graded air box lateral convergence, air_radius_factor=16"
         air_radius_factor: 16.0
 
   # C. Lower air box convergence.
-  # Expected: sensor-side field should stabilize as the lower phi=0 boundary moves down.
+  # Main laptop-safe comparison: 8R <-> 12R below the sensor side.
   air_below_convergence:
     fixed:
-      h_air: 50.0e-6
+      h_air: 75.0e-6
+      h_air_near: 75.0e-6
+      h_air_far: 225.0e-6
       air_radius_factor: 16.0
       air_above_factor: 4.0
     cases:
-      - id: air_below_4R
-        description: "Air box lower boundary convergence, air_below_factor=4"
-        air_below_factor: 4.0
       - id: air_below_8R
-        description: "Air box lower boundary convergence, air_below_factor=8"
+        description: "Graded air box lower boundary convergence, air_below_factor=8"
         air_below_factor: 8.0
       - id: air_below_12R
-        description: "Air box lower boundary convergence, air_below_factor=12"
+        description: "Graded air box lower boundary convergence, air_below_factor=12"
         air_below_factor: 12.0

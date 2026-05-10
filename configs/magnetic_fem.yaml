@@ -13,6 +13,9 @@ rotate_magnetization: true
 
 magnetic_boundary: natural
 h_air: 100.0e-6
+h_air_near: 100.0e-6
+h_air_far: 300.0e-6
+near_radius_factor: 3.0
 air_radius_factor: 8.0
 air_below_factor: 4.0
 air_above_factor: 4.0
