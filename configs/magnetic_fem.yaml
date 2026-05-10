@@ -3,7 +3,7 @@ restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_d
 outdir: ../magnetic_cilium_3d_results_final
 
 # Laptop-safe single magnetostatic FEM check:
-# natural boundary, coarse air mesh, small air box, and Hall sensor averaging.
+# natural boundary, graded air mesh, reliable source projection, and Hall sensor averaging.
 Br: 0.15
 # sensor_x: 0.0
 sensor_x_over_r: 1.0
@@ -12,14 +12,14 @@ sensor_z: 0.0
 rotate_magnetization: true
 
 magnetic_boundary: natural
-h_air: 100.0e-6
-h_air_near: 100.0e-6
-h_air_far: 300.0e-6
+h_air: 75.0e-6
+h_air_near: 75.0e-6
+h_air_far: 225.0e-6
 near_radius_factor: 3.0
 near_source_padding_factor: 2.0
 near_sensor_padding_factor: 1.0
-air_radius_factor: 8.0
-air_below_factor: 4.0
+air_radius_factor: 12.0
+air_below_factor: 8.0
 air_above_factor: 4.0
 
 sensor_average: true

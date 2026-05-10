@@ -344,6 +344,14 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     air_radius, air_below, air_above = compute_air_box_dimensions(params, initial_tets, deformed_tets, args)
     near_radius = compute_near_field_radius(params, initial_tets, deformed_tets, sensor_point, args)
     near_radius = min(near_radius, air_radius)
+    near_radius_to_air_radius = near_radius / air_radius if air_radius > 0.0 else np.inf
+    near_radius_saturates_air_box = near_radius_to_air_radius >= 0.95
+    if near_radius_saturates_air_box:
+        log.warning(
+            "Near-field refinement radius nearly reaches air box radius: near_radius/air_radius=%.3f. "
+            "Graded mesh may behave like a near-uniform mesh or the air box may be too small.",
+            near_radius_to_air_radius,
+        )
 
     log.info(
         "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, h_near=%.6e m, h_far=%.6e m, near_radius=%.6e m, boundary=%s",
@@ -391,6 +399,7 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     source_volume_error1 = 100.0 * abs(source_volume1 - reference_volume) / reference_volume
     source_projection_ok = max(source_volume_error0, source_volume_error1) <= 5.0
     source_projection_warning = max(source_volume_error0, source_volume_error1) > 20.0
+    fem_result_reliable_for_comparison = bool(source_projection_ok)
     if source_volume_error0 > 20.0 or source_volume_error1 > 20.0:
         log.warning(
             "Magnetic source volume projection error is large: initial=%.3f%%, deformed=%.3f%%",
@@ -422,6 +431,8 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "near_sensor_padding_factor": args.near_sensor_padding_factor,
         "near_radius_m": near_radius,
         "near_radius_over_R": near_radius / params.R if params.R > 0.0 else "",
+        "near_radius_to_air_radius": near_radius_to_air_radius,
+        "near_radius_saturates_air_box": bool(near_radius_saturates_air_box),
         "air_cells": air_cells,
         "air_vertices": air_vertices,
         "initial_source_cells": tagged0,
@@ -435,6 +446,7 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "source_volume_error_deformed_percent": source_volume_error1,
         "source_projection_ok": source_projection_ok,
         "source_projection_warning": source_projection_warning,
+        "fem_result_reliable_for_comparison": fem_result_reliable_for_comparison,
         "B0_sensor_x_uT": B0[0] * 1e6,
         "B0_sensor_y_uT": B0[1] * 1e6,
         "B0_sensor_z_uT": B0[2] * 1e6,

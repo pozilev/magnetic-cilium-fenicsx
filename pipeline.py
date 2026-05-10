@@ -341,12 +341,13 @@ def magnetic_fem_summary_columns() -> List[str]:
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
         "h_air_near_m", "h_air_far_m", "near_radius_factor",
         "near_source_padding_factor", "near_sensor_padding_factor", "near_radius_m", "near_radius_over_R",
+        "near_radius_to_air_radius", "near_radius_saturates_air_box",
         "air_cells", "air_vertices",
         "initial_source_cells", "deformed_source_cells",
         "source_cells_initial", "source_cells_deformed",
         "source_volume_initial_m3", "source_volume_deformed_m3", "reference_magnetic_volume_m3",
         "source_volume_error_initial_percent", "source_volume_error_deformed_percent",
-        "source_projection_ok", "source_projection_warning",
+        "source_projection_ok", "source_projection_warning", "fem_result_reliable_for_comparison",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
         "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
@@ -377,12 +378,19 @@ def print_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> Non
         "near mesh = "
         f"radius:{result['near_radius_m']:.6g} m "
         f"({result['near_radius_over_R']:.6g} R), "
+        f"near/air:{result['near_radius_to_air_radius']:.6g}, "
         f"h_near:{result['h_air_near_m']:.6g} m, h_far:{result['h_air_far_m']:.6g} m"
     )
     print(
         "source volume error = "
         f"initial:{result['source_volume_error_initial_percent']:.6g}%, "
         f"deformed:{result['source_volume_error_deformed_percent']:.6g}%"
+    )
+    print(
+        "quality flags = "
+        f"source_projection_ok:{result['source_projection_ok']}, "
+        f"near_radius_saturates_air_box:{result['near_radius_saturates_air_box']}, "
+        f"reliable_for_comparison:{result['fem_result_reliable_for_comparison']}"
     )
     print(
         "B0_sensor = "

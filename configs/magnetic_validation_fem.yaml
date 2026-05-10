@@ -42,8 +42,8 @@ sweep:
   # near-field target size; the far field is coarsened by h_air_far.
   h_air_convergence:
     fixed:
-      air_radius_factor: 8.0
-      air_below_factor: 4.0
+      air_radius_factor: 12.0
+      air_below_factor: 8.0
       air_above_factor: 4.0
     cases:
       - id: h_air_100um
