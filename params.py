@@ -176,6 +176,12 @@ def parse_args():
     parser.add_argument("--air-below-factor", type=float, default=cfg("air_below_factor", 4.0))
     parser.add_argument("--air-above-factor", type=float, default=cfg("air_above_factor", 4.0))
     parser.add_argument("--h-air", type=float, default=cfg("h_air", 100e-6))
+    parser.add_argument("--magnetic-boundary", choices=["dirichlet_zero", "natural"], default=cfg("magnetic_boundary", "natural"))
+    parser.add_argument("--sensor-average", action="store_true", default=cfg("sensor_average", False))
+    parser.add_argument("--sensor-average-radius", type=float, default=cfg("sensor_average_radius", 25e-6))
+    parser.add_argument("--sensor-average-n", type=int, default=cfg("sensor_average_n", 5))
+    parser.add_argument("--max-air-cells", type=int, default=cfg("max_air_cells", 700000))
+    parser.add_argument("--allow-large-air-mesh", action="store_true", default=cfg("allow_large_air_mesh", False))
 
     args = parser.parse_args()
     args.config = pre_args.config

@@ -2,12 +2,24 @@ mode: magnetics-fem
 restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
 outdir: ../magnetic_cilium_3d_results_final
 
-# Magnetic-only defaults for single-run magnetics; the validation sweep uses
-# the fixed Br/gap/sensor_x grid defined in pipeline.py.
+# Laptop-safe single magnetostatic FEM check:
+# natural boundary, coarse air mesh, small air box, and Hall sensor averaging.
 Br: 0.15
 # sensor_x: 0.0
 sensor_x_over_r: 1.0
 # sensor_y: 0.0
 sensor_z: 0.0
-# rotate_magnetization: true
-# target_sensitivity_uT_per_uN: 1.0
+rotate_magnetization: true
+
+magnetic_boundary: natural
+h_air: 100.0e-6
+air_radius_factor: 8.0
+air_below_factor: 4.0
+air_above_factor: 4.0
+
+sensor_average: true
+sensor_average_radius: 25.0e-6
+sensor_average_n: 5
+
+max_air_cells: 700000
+allow_large_air_mesh: false

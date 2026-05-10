@@ -20,12 +20,16 @@ from params import ModelParams
 log = logging.getLogger("magnetic_cilium_3d")
 
 
-def build_air_box_mesh(params: ModelParams, air_radius: float, air_below: float, air_above: float, h_air: float):
-    """Build the first magnetostatic FEM baseline air box.
-
-    This uses phi=0 on the outer boundary as an approximation of an open
-    magnetic domain. Accuracy depends on air box size and h_air.
-    """
+def build_air_box_mesh(
+        params: ModelParams,
+        air_radius: float,
+        air_below: float,
+        air_above: float,
+        h_air: float,
+        max_air_cells: int,
+        allow_large_air_mesh: bool,
+    ):
+    """Build a tetrahedral air box for the magnetostatic FEM postprocessor."""
     gmsh.initialize()
     gmsh.model.add("magnetic_cilium_air_box")
     try:
@@ -60,6 +64,12 @@ def build_air_box_mesh(params: ModelParams, air_radius: float, air_below: float,
         tag_to_local = {int(tag): i for i, tag in enumerate(node_tags)}
         cells = np.array([[tag_to_local[int(t)] for t in tet] for tet in tet_nodes], dtype=np.int64)
         log.info("magnetics-fem: air box nodes=%d, tetrahedra=%d", points.shape[0], cells.shape[0])
+        if cells.shape[0] > max_air_cells and not allow_large_air_mesh:
+            raise RuntimeError(
+                "Air mesh too large for default laptop-safe mode: "
+                f"{cells.shape[0]} tetrahedra > max_air_cells={max_air_cells}. "
+                "Increase --h-air, reduce air box factors, or pass --allow-large-air-mesh."
+            )
         return create_dolfinx_mesh_3d(points, cells)
     finally:
         gmsh.finalize()
@@ -122,6 +132,27 @@ def point_in_tet(point: np.ndarray, tet: np.ndarray, tol: float = 1e-10) -> bool
     return bool(np.all(bary >= -tol) and np.all(bary <= 1.0 + tol))
 
 
+def cell_volume_from_vertices(vertices: np.ndarray) -> float:
+    return abs(float(np.linalg.det(np.vstack([
+        vertices[1] - vertices[0],
+        vertices[2] - vertices[0],
+        vertices[3] - vertices[0],
+    ])))) / 6.0
+
+
+def tetrahedral_cell_volumes(domain) -> np.ndarray:
+    tdim = domain.topology.dim
+    domain.topology.create_connectivity(tdim, 0)
+    c_to_v = domain.topology.connectivity(tdim, 0)
+    points = domain.geometry.x[:, :3]
+    num_cells = domain.topology.index_map(tdim).size_local
+    volumes = np.zeros(num_cells, dtype=np.float64)
+    for c in range(num_cells):
+        vertices = points[c_to_v.links(int(c))]
+        volumes[c] = cell_volume_from_vertices(vertices)
+    return volumes
+
+
 def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.ndarray):
     """Tag magnetic FEM cells by center-in-deformed-tetra membership.
 
@@ -143,7 +174,9 @@ def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.n
     M_field.name = "magnetization"
 
     M_array = M_field.x.array.reshape((-1, 3))
+    cell_volumes = tetrahedral_cell_volumes(magnetic_domain)
     tagged = 0
+    tagged_volume = 0.0
     for c, point in enumerate(centers):
         candidates = np.where(np.all((point >= bmin) & (point <= bmax), axis=1))[0]
         for idx in candidates:
@@ -152,20 +185,22 @@ def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.n
                 indicator.x.array[dof] = 1.0
                 M_array[c, :] = source_M[idx]
                 tagged += 1
+                tagged_volume += cell_volumes[c]
                 break
 
     indicator.x.scatter_forward()
     M_field.x.scatter_forward()
-    log.info("magnetics-fem: tagged magnetic source cells = %d", tagged)
-    return M_field, indicator, tagged
+    log.info("magnetics-fem: tagged magnetic source cells = %d, volume=%.6e m^3", tagged, tagged_volume)
+    return M_field, indicator, tagged, tagged_volume
 
 
 def solve_magnetostatic_scalar_potential(
         magnetic_domain,
         M_field,
         magnetic_indicator,
-        sensor_point,
+        sensor_points,
         params: ModelParams,
+        magnetic_boundary: str,
         petsc_options_prefix: str = "magnetostatic_",
     ):
     """Solve div(-grad(phi) + M)=0 using scalar potential.
@@ -180,19 +215,26 @@ def solve_magnetostatic_scalar_potential(
     a = ufl.inner(ufl.grad(phi), ufl.grad(v)) * ufl.dx
     L = ufl.inner(M_field, ufl.grad(v)) * ufl.dx
 
-    fdim = magnetic_domain.topology.dim - 1
-    boundary_facets = mesh.locate_entities_boundary(
-        magnetic_domain,
-        fdim,
-        lambda x: np.full(x.shape[1], True, dtype=bool),
-    )
-    boundary_dofs = fem.locate_dofs_topological(V, fdim, boundary_facets)
-    bc = fem.dirichletbc(default_scalar_type(0.0), boundary_dofs, V)
+    bcs = []
+    if magnetic_boundary == "dirichlet_zero":
+        fdim = magnetic_domain.topology.dim - 1
+        boundary_facets = mesh.locate_entities_boundary(
+            magnetic_domain,
+            fdim,
+            lambda x: np.full(x.shape[1], True, dtype=bool),
+        )
+        boundary_dofs = fem.locate_dofs_topological(V, fdim, boundary_facets)
+        bcs = [fem.dirichletbc(default_scalar_type(0.0), boundary_dofs, V)]
+    elif magnetic_boundary == "natural":
+        gauge_dof = np.array([0], dtype=np.int32)
+        bcs = [fem.dirichletbc(default_scalar_type(0.0), gauge_dof, V)]
+    else:
+        raise RuntimeError(f"Unknown magnetic boundary mode: {magnetic_boundary}")
 
     problem = fem_petsc.LinearProblem(
         a,
         L,
-        bcs=[bc],
+        bcs=bcs,
         petsc_options_prefix=petsc_options_prefix,
         petsc_options={
             "ksp_type": "cg",
@@ -206,7 +248,10 @@ def solve_magnetostatic_scalar_potential(
     phi_h.name = "magnetic_scalar_potential"
     phi_h.x.scatter_forward()
 
-    grad_phi = gradient_at_point(magnetic_domain, V, phi_h, np.asarray(sensor_point, dtype=np.float64))
+    gradients = []
+    for point in np.asarray(sensor_points, dtype=np.float64):
+        gradients.append(gradient_at_point(magnetic_domain, V, phi_h, point))
+    grad_phi = np.mean(np.asarray(gradients, dtype=np.float64), axis=0)
     B_sensor = -(4.0 * np.pi * 1e-7) * grad_phi
     return phi_h, B_sensor
 
@@ -230,6 +275,27 @@ def gradient_at_point(domain, V, phi_h, point: np.ndarray) -> np.ndarray:
     A = np.vstack([coords[1] - coords[0], coords[2] - coords[0], coords[3] - coords[0]]).T
     b = np.array([values[1] - values[0], values[2] - values[0], values[3] - values[0]], dtype=np.float64)
     return np.linalg.solve(A.T, b)
+
+
+def make_sensor_sample_points(sensor_point: np.ndarray, average: bool, radius: float, n: int) -> np.ndarray:
+    if not average:
+        return np.asarray([sensor_point], dtype=np.float64)
+    if radius <= 0.0:
+        raise RuntimeError("--sensor-average-radius must be positive when --sensor-average is used.")
+    if n < 1:
+        raise RuntimeError("--sensor-average-n must be >= 1.")
+    if n == 1:
+        return np.asarray([sensor_point], dtype=np.float64)
+
+    offsets = np.linspace(-radius, radius, n)
+    points = []
+    for dx in offsets:
+        for dy in offsets:
+            if dx * dx + dy * dy <= radius * radius + 1e-30:
+                points.append([sensor_point[0] + dx, sensor_point[1] + dy, sensor_point[2]])
+    if not points:
+        raise RuntimeError("Sensor averaging produced no sample points.")
+    return np.asarray(points, dtype=np.float64)
 
 
 def compute_air_box_dimensions(params: ModelParams, initial_tets: np.ndarray, deformed_tets: np.ndarray, args) -> Tuple[float, float, float]:
@@ -258,38 +324,70 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     params = ModelParams(**params_dict)
 
     sensor_point = np.array([params.sensor_x, params.sensor_y, params.sensor_z], dtype=np.float64)
+    sensor_points = make_sensor_sample_points(
+        sensor_point,
+        bool(args.sensor_average),
+        float(args.sensor_average_radius),
+        int(args.sensor_average_n),
+    )
     initial_tets, initial_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=False)
     deformed_tets, deformed_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=True)
     air_radius, air_below, air_above = compute_air_box_dimensions(params, initial_tets, deformed_tets, args)
 
     log.info(
-        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m",
-        air_radius, air_below, air_above, args.h_air,
+        "magnetics-fem: air_radius=%.6e m, air_below=%.6e m, air_above=%.6e m, h_air=%.6e m, boundary=%s",
+        air_radius, air_below, air_above, args.h_air, args.magnetic_boundary,
     )
     log.info(
-        "magnetics-fem: first FEM baseline; phi=0 outer boundary approximates open magnetic space. Accuracy depends on air box size and h_air."
+        "magnetics-fem: sensor_average=%s, sample_points=%d, max_air_cells=%d",
+        bool(args.sensor_average), sensor_points.shape[0], int(args.max_air_cells),
     )
 
-    magnetic_domain = build_air_box_mesh(params, air_radius, air_below, air_above, args.h_air)
+    magnetic_domain = build_air_box_mesh(
+        params,
+        air_radius,
+        air_below,
+        air_above,
+        args.h_air,
+        int(args.max_air_cells),
+        bool(args.allow_large_air_mesh),
+    )
+    air_cells = int(magnetic_domain.topology.index_map(magnetic_domain.topology.dim).size_local)
+    air_vertices = int(magnetic_domain.topology.index_map(0).size_local)
 
-    M0, indicator0, tagged0 = build_source_fields(magnetic_domain, initial_tets, initial_M)
+    M0, indicator0, tagged0, source_volume0 = build_source_fields(magnetic_domain, initial_tets, initial_M)
     _, B0 = solve_magnetostatic_scalar_potential(
-        magnetic_domain, M0, indicator0, sensor_point, params,
+        magnetic_domain, M0, indicator0, sensor_points, params, args.magnetic_boundary,
         petsc_options_prefix="magnetostatic_initial_"
     
     )
 
-    M1, indicator1, tagged1 = build_source_fields(magnetic_domain, deformed_tets, deformed_M)
+    M1, indicator1, tagged1, source_volume1 = build_source_fields(magnetic_domain, deformed_tets, deformed_M)
     _, B1 = solve_magnetostatic_scalar_potential(
-        magnetic_domain, M1, indicator1, sensor_point, params,
+        magnetic_domain, M1, indicator1, sensor_points, params, args.magnetic_boundary,
         petsc_options_prefix="magnetostatic_deformed_"
     )
 
     dB = B1 - B0
     reaction_uN = float(mechanics_result.get("reaction_force_x_uN", 0.0) or 0.0)
+    reference_volume = float(mechanics_result.get("volume_upper_m3", 0.0) or 0.0)
+    if reference_volume <= 0.0:
+        reference_volume = float(np.pi * params.R**2 * params.L2)
+    source_volume_error0 = 100.0 * abs(source_volume0 - reference_volume) / reference_volume
+    source_volume_error1 = 100.0 * abs(source_volume1 - reference_volume) / reference_volume
+    if source_volume_error0 > 20.0 or source_volume_error1 > 20.0:
+        log.warning(
+            "Magnetic source volume projection error is large: initial=%.3f%%, deformed=%.3f%%",
+            source_volume_error0, source_volume_error1,
+        )
 
     diagnostics = {
         "Br_magnetic_T": params.Br_magnetic,
+        "magnetic_boundary": args.magnetic_boundary,
+        "sensor_average": bool(args.sensor_average),
+        "sensor_average_radius_m": float(args.sensor_average_radius),
+        "sensor_average_n": int(args.sensor_average_n),
+        "sensor_average_points_used": int(sensor_points.shape[0]),
         "sensor_x_m": params.sensor_x,
         "sensor_y_m": params.sensor_y,
         "sensor_z_m": params.sensor_z,
@@ -301,8 +399,17 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "air_below_m": air_below,
         "air_above_m": air_above,
         "h_air_m": args.h_air,
+        "air_cells": air_cells,
+        "air_vertices": air_vertices,
         "initial_source_cells": tagged0,
         "deformed_source_cells": tagged1,
+        "source_cells_initial": tagged0,
+        "source_cells_deformed": tagged1,
+        "source_volume_initial_m3": source_volume0,
+        "source_volume_deformed_m3": source_volume1,
+        "reference_magnetic_volume_m3": reference_volume,
+        "source_volume_error_initial_percent": source_volume_error0,
+        "source_volume_error_deformed_percent": source_volume_error1,
         "B0_sensor_x_uT": B0[0] * 1e6,
         "B0_sensor_y_uT": B0[1] * 1e6,
         "B0_sensor_z_uT": B0[2] * 1e6,

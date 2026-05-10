@@ -306,10 +306,16 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
 def magnetic_fem_summary_columns() -> List[str]:
     return [
         "Br_magnetic_T",
+        "magnetic_boundary",
+        "sensor_average", "sensor_average_radius_m", "sensor_average_n", "sensor_average_points_used",
         "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R",
         "air_radius_factor", "air_below_factor", "air_above_factor",
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
+        "air_cells", "air_vertices",
         "initial_source_cells", "deformed_source_cells",
+        "source_cells_initial", "source_cells_deformed",
+        "source_volume_initial_m3", "source_volume_deformed_m3", "reference_magnetic_volume_m3",
+        "source_volume_error_initial_percent", "source_volume_error_deformed_percent",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
         "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
@@ -330,6 +336,17 @@ def write_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> Non
 def print_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> None:
     print("\n=== MAGNETOSTATIC FEM SUMMARY ===")
     print(f"summary_csv = {summary_path}")
+    print(
+        f"magnetic_boundary = {result['magnetic_boundary']}, "
+        f"sensor_average = {result['sensor_average']} "
+        f"(points={result['sensor_average_points_used']}, radius={result['sensor_average_radius_m']} m)"
+    )
+    print(f"air mesh = {result['air_cells']} tetrahedra, {result['air_vertices']} vertices")
+    print(
+        "source volume error = "
+        f"initial:{result['source_volume_error_initial_percent']:.6g}%, "
+        f"deformed:{result['source_volume_error_deformed_percent']:.6g}%"
+    )
     print(
         "B0_sensor = "
         f"[{result['B0_sensor_x_uT']:.6g}, {result['B0_sensor_y_uT']:.6g}, {result['B0_sensor_z_uT']:.6g}] uT, "
@@ -440,6 +457,12 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         air_below_factor=float(params.get("air_below_factor", 4.0)),
         air_above_factor=float(params.get("air_above_factor", 4.0)),
         h_air=float(params.get("h_air", 100e-6)),
+        magnetic_boundary=str(params.get("magnetic_boundary", "natural")),
+        sensor_average=bool(params.get("sensor_average", False)),
+        sensor_average_radius=float(params.get("sensor_average_radius", 25e-6)),
+        sensor_average_n=int(params.get("sensor_average_n", 5)),
+        max_air_cells=int(params.get("max_air_cells", 700000)),
+        allow_large_air_mesh=bool(params.get("allow_large_air_mesh", False)),
     )
 
 
@@ -478,7 +501,8 @@ def print_magnetics_fem_validation_plan_summary(config_path: str, results: List[
         print(
             f"{label} = {result['validation_group']}/{result['case_id']}, "
             f"{key}={value:.6g} uT, h_air={result['h_air_m']:.3e} m, "
-            f"air=[{result['air_radius_factor']}, {result['air_below_factor']}, {result['air_above_factor']}]"
+            f"air=[{result['air_radius_factor']}, {result['air_below_factor']}, {result['air_above_factor']}], "
+            f"boundary={result['magnetic_boundary']}, avg={result['sensor_average']}"
         )
 
 
