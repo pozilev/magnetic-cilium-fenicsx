@@ -84,6 +84,13 @@ def load_yaml_config(path: str) -> dict:
         raise RuntimeError(f"Config must be a YAML mapping: {path}")
 
     config = {str(key).replace("-", "_"): value for key, value in data.items()}
+    if {"global", "fixed_physical_parameters", "sweep"}.issubset(config):
+        global_config = config.get("global") or {}
+        return {
+            "mode": "magnetics-fem-validation",
+            "restart_dir": global_config.get("restart_dir"),
+            "outdir": global_config.get("output_dir"),
+        }
     if "Br_magnetic" in config and "Br" not in config:
         config["Br"] = config["Br_magnetic"]
     if "delta_x" in config and "delta" not in config:
@@ -101,14 +108,27 @@ def load_config_defaults(config_path: str | None) -> dict:
     return load_yaml_config(config_path)
 
 
+def resolve_config_path(config_path: str | None) -> str | None:
+    if config_path is None or os.path.exists(config_path):
+        return config_path
+    configs_path = os.path.join("configs", config_path)
+    if os.path.exists(configs_path):
+        return configs_path
+    return config_path
+
+
 def parse_args():
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--config", default=None, help="YAML config file with CLI defaults.")
     pre_args, _ = pre_parser.parse_known_args()
+    pre_args.config = resolve_config_path(pre_args.config)
     config_defaults = load_config_defaults(pre_args.config)
 
     def cfg(name, default):
         return config_defaults.get(name, default)
+
+    def cli_has(option: str) -> bool:
+        return any(arg == option or arg.startswith(option + "=") for arg in sys.argv[1:])
 
     parser = argparse.ArgumentParser(
         description="Pipeline 3D hyperelastic FEM + dipole magnetic postprocessor for a double-layer magnetic cilium.",
@@ -117,7 +137,10 @@ def parse_args():
 
     parser.add_argument(
         "--mode",
-        choices=["validation", "final", "full", "mechanics", "magnetics", "magnetic-only", "magnetic-validation"],
+        choices=[
+            "validation", "final", "full", "mechanics", "magnetics", "magnetic-only",
+            "magnetic-validation", "magnetics-fem", "magnetics-fem-validation",
+        ],
         default=cfg("mode", "validation"),
         help="validation: sweeps; full/final: mechanics+magnetics; mechanics: save restart; magnetics/magnetic-only: read restart.",
     )
@@ -143,18 +166,35 @@ def parse_args():
     # Magnetics
     parser.add_argument("--Br", type=float, default=cfg("Br", 0.10), help="Effective remanence, T.")
     parser.add_argument("--sensor-x", type=float, default=cfg("sensor_x", 0.0))
+    parser.add_argument("--sensor-x-over-r", type=float, default=cfg("sensor_x_over_r", None))
     parser.add_argument("--sensor-y", type=float, default=cfg("sensor_y", 0.0))
     parser.add_argument("--sensor-z", type=float, default=cfg("sensor_z", -50e-6), help="Use --sensor-z=-50e-6 for negative values.")
     parser.add_argument("--no-rotate-magnetization", dest="no_rotate_magnetization", action="store_true", default=cfg("no_rotate_magnetization", False))
     parser.add_argument("--rotate-magnetization", dest="no_rotate_magnetization", action="store_false")
     parser.add_argument("--target-sensitivity-uT-per-uN", type=float, default=cfg("target_sensitivity_uT_per_uN", 1.0))
+    parser.add_argument("--air-radius-factor", type=float, default=cfg("air_radius_factor", 8.0))
+    parser.add_argument("--air-below-factor", type=float, default=cfg("air_below_factor", 4.0))
+    parser.add_argument("--air-above-factor", type=float, default=cfg("air_above_factor", 4.0))
+    parser.add_argument("--h-air", type=float, default=cfg("h_air", 100e-6))
 
     args = parser.parse_args()
+    args.config = pre_args.config
 
     if args.mode == "final":
         args.mode = "full"
     if args.mode == "magnetic-validation":
         args.mode = "magnetic-only"
+
+    magnetic_modes = {"magnetics", "magnetic-only", "magnetics-fem"}
+    if args.mode in magnetic_modes:
+        sensor_x_over_r_from_config = "sensor_x_over_r" in config_defaults
+        sensor_z_from_config = "sensor_z" in config_defaults
+        if args.sensor_x_over_r is None and not cli_has("--sensor-x") and not sensor_x_over_r_from_config:
+            args.sensor_x_over_r = 1.0
+        if args.sensor_x_over_r is not None and not cli_has("--sensor-x"):
+            args.sensor_x = args.sensor_x_over_r * (args.D / 2.0)
+        if not cli_has("--sensor-z") and not sensor_z_from_config:
+            args.sensor_z = 0.0
 
     if args.outdir is None:
         if args.mode == "validation":

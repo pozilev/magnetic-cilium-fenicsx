@@ -1,13 +1,13 @@
-mode: magnetic-validation
+mode: magnetics-fem
 restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
 outdir: ../magnetic_cilium_3d_results_final
 
 # Magnetic-only defaults for single-run magnetics; the validation sweep uses
 # the fixed Br/gap/sensor_x grid defined in pipeline.py.
-Br: 0.10
-sensor_x: 0.0
+Br: 0.15
+# sensor_x: 0.0
 sensor_x_over_r: 1.0
-sensor_y: 0.0
+# sensor_y: 0.0
 sensor_z: 0.0
-rotate_magnetization: true
-target_sensitivity_uT_per_uN: 1.0
+# rotate_magnetization: true
+# target_sensitivity_uT_per_uN: 1.0

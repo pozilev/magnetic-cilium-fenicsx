@@ -1,0 +1,115 @@
+# Magnetostatic FEM numerical validation plan.
+#
+# Purpose:
+# - check convergence of the scalar-potential magnetostatic FEM postprocessor;
+# - separate numerical effects from the physical model;
+# - verify whether B0, B1, and dB stabilize as h_air is refined and the air box grows.
+#
+# Notes:
+# - The mechanical solution is already validated and is loaded only from restart.
+# - The outer boundary condition phi=0 is an approximation of an open magnetic domain.
+# - Air box size is swept because this boundary approximation can bias the near field.
+# - sensor_x_over_r = 1.0 is used because previous dipole validation found the largest
+#   signal near sensor_x ~= +R, with dBx as the dominant component.
+# - Convergence is indicated by stabilization of dB, especially dBx and |dB|.
+
+global:
+  mode: magnetics-fem
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_validation_results
+  validation_summary_csv: magnetic_fem_validation_summary.csv
+
+fixed_physical_parameters:
+  Br: 0.15
+  sensor_x_over_r: 1.0
+  sensor_y_over_r: 0.0
+  sensor_z: 0.0
+  rotate_magnetization: true
+
+sweep:
+  # A. Air mesh convergence.
+  # Expected: B0, B1, and dB should approach stable values as h_air decreases.
+  h_air_convergence:
+    fixed:
+      air_radius_factor: 8.0
+      air_below_factor: 4.0
+      air_above_factor: 4.0
+    cases:
+      - id: h_air_100um
+        description: "Air mesh convergence, h_air=100 um"
+        h_air: 100.0e-6
+      - id: h_air_75um
+        description: "Air mesh convergence, h_air=75 um"
+        h_air: 75.0e-6
+      - id: h_air_50um
+        description: "Air mesh convergence, h_air=50 um"
+        h_air: 50.0e-6
+      - id: h_air_35um
+        description: "Air mesh convergence, h_air=35 um"
+        h_air: 35.0e-6
+      - id: h_air_25um
+        description: "Air mesh convergence, h_air=25 um"
+        h_air: 25.0e-6
+
+  # B. Lateral air box convergence.
+  # Expected: dB should stabilize as side boundaries move away from the cilium.
+  air_radius_convergence:
+    fixed:
+      h_air: 50.0e-6
+      air_below_factor: 4.0
+      air_above_factor: 4.0
+    cases:
+      - id: air_radius_8R
+        description: "Air box lateral convergence, air_radius_factor=8"
+        air_radius_factor: 8.0
+      - id: air_radius_12R
+        description: "Air box lateral convergence, air_radius_factor=12"
+        air_radius_factor: 12.0
+      - id: air_radius_16R
+        description: "Air box lateral convergence, air_radius_factor=16"
+        air_radius_factor: 16.0
+      - id: air_radius_24R
+        description: "Air box lateral convergence, air_radius_factor=24"
+        air_radius_factor: 24.0
+
+  # C. Lower air box convergence.
+  # Expected: sensor-side field should stabilize as the lower phi=0 boundary moves down.
+  air_below_convergence:
+    fixed:
+      h_air: 50.0e-6
+      air_radius_factor: 16.0
+      air_above_factor: 4.0
+    cases:
+      - id: air_below_4R
+        description: "Air box lower boundary convergence, air_below_factor=4"
+        air_below_factor: 4.0
+      - id: air_below_8R
+        description: "Air box lower boundary convergence, air_below_factor=8"
+        air_below_factor: 8.0
+      - id: air_below_12R
+        description: "Air box lower boundary convergence, air_below_factor=12"
+        air_below_factor: 12.0
+      - id: air_below_16R
+        description: "Air box lower boundary convergence, air_below_factor=16"
+        air_below_factor: 16.0
+
+  # D. Upper air box convergence.
+  # Expected: dB should stabilize as the upper phi=0 boundary moves above the cilium.
+  air_above_convergence:
+    fixed:
+      h_air: 50.0e-6
+      air_radius_factor: 16.0
+      air_below_factor: 12.0
+    cases:
+      - id: air_above_4R
+        description: "Air box upper boundary convergence, air_above_factor=4"
+        air_above_factor: 4.0
+      - id: air_above_8R
+        description: "Air box upper boundary convergence, air_above_factor=8"
+        air_above_factor: 8.0
+      - id: air_above_12R
+        description: "Air box upper boundary convergence, air_above_factor=12"
+        air_above_factor: 12.0
+      - id: air_above_16R
+        description: "Air box upper boundary convergence, air_above_factor=16"
+        air_above_factor: 16.0

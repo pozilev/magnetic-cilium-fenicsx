@@ -18,6 +18,8 @@ def main():
         from pipeline import (
             print_summary,
             run_magnetic_only_validation,
+            run_magnetics_fem_validation_from_config,
+            run_magnetics_fem_from_restart,
             run_magnetics_from_restart,
             run_single_pipeline_case,
             run_validation_study,
@@ -40,6 +42,10 @@ def main():
             print_summary(results, summary_path)
         elif args.mode == "magnetics":
             run_magnetics_from_restart(args)
+        elif args.mode == "magnetics-fem":
+            run_magnetics_fem_from_restart(args)
+        elif args.mode == "magnetics-fem-validation":
+            run_magnetics_fem_validation_from_config(args.config)
         elif args.mode == "magnetic-only":
             run_magnetic_only_validation(args)
         else:

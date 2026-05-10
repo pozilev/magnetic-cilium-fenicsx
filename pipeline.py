@@ -3,6 +3,7 @@ import gc
 import json
 import logging
 import os
+from argparse import Namespace
 from dataclasses import asdict
 from typing import Any, Dict, List, Tuple
 
@@ -300,6 +301,236 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
     write_summary([result], summary_path)
     print_summary([result], summary_path)
     return [result]
+
+
+def magnetic_fem_summary_columns() -> List[str]:
+    return [
+        "Br_magnetic_T",
+        "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R",
+        "air_radius_factor", "air_below_factor", "air_above_factor",
+        "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
+        "initial_source_cells", "deformed_source_cells",
+        "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
+        "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
+        "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
+        "reaction_force_x_uN",
+        "sensitivity_x_uT_per_uN", "sensitivity_z_uT_per_uN", "sensitivity_norm_uT_per_uN",
+    ]
+
+
+def write_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> None:
+    os.makedirs(os.path.dirname(summary_path), exist_ok=True)
+    columns = magnetic_fem_summary_columns()
+    with open(summary_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        writer.writerow({key: result.get(key, "") for key in columns})
+
+
+def print_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> None:
+    print("\n=== MAGNETOSTATIC FEM SUMMARY ===")
+    print(f"summary_csv = {summary_path}")
+    print(
+        "B0_sensor = "
+        f"[{result['B0_sensor_x_uT']:.6g}, {result['B0_sensor_y_uT']:.6g}, {result['B0_sensor_z_uT']:.6g}] uT, "
+        f"|B0|={result['B0_sensor_norm_uT']:.6g} uT"
+    )
+    print(
+        "B1_sensor = "
+        f"[{result['B1_sensor_x_uT']:.6g}, {result['B1_sensor_y_uT']:.6g}, {result['B1_sensor_z_uT']:.6g}] uT, "
+        f"|B1|={result['B1_sensor_norm_uT']:.6g} uT"
+    )
+    print(
+        "dB_sensor = "
+        f"[{result['dB_sensor_x_uT']:.6g}, {result['dB_sensor_y_uT']:.6g}, {result['dB_sensor_z_uT']:.6g}] uT, "
+        f"|dB|={result['dB_sensor_norm_uT']:.6g} uT"
+    )
+    print(
+        "sensitivity = "
+        f"x:{result['sensitivity_x_uT_per_uN']} uT/uN, "
+        f"z:{result['sensitivity_z_uT_per_uN']} uT/uN, "
+        f"norm:{result['sensitivity_norm_uT_per_uN']} uT/uN"
+    )
+
+
+def run_magnetics_fem_from_restart(args) -> Dict[str, Any]:
+    if args.restart_dir is None:
+        raise RuntimeError("--restart-dir is required for --mode magnetics-fem")
+
+    from magnetics_fem import compute_magnetostatic_fem_diagnostics
+
+    domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(args.restart_dir)
+    result = compute_magnetostatic_fem_diagnostics(domain, material, u_vertices, saved_params, mechanics_result, args)
+
+    outdir = args.outdir if args.outdir is not None else args.restart_dir
+    os.makedirs(outdir, exist_ok=True)
+    summary_path = os.path.join(outdir, "magnetic_fem_summary.csv")
+    write_magnetic_fem_summary(result, summary_path)
+    print_magnetic_fem_summary(result, summary_path)
+    return result
+
+
+def load_magnetics_fem_validation_config(config_path: str) -> Dict[str, Any]:
+    try:
+        import yaml
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("PyYAML is required for nested FEM validation configs.") from exc
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+    if not isinstance(config, dict):
+        raise RuntimeError(f"FEM validation config must be a YAML mapping: {config_path}")
+    return config
+
+
+def validate_magnetics_fem_validation_config(config: Dict[str, Any]) -> None:
+    global_config = config.get("global")
+    sweep = config.get("sweep")
+    if not isinstance(global_config, dict):
+        raise RuntimeError("FEM validation config requires a global section.")
+    if not global_config.get("restart_dir"):
+        raise RuntimeError("FEM validation config requires global.restart_dir.")
+    if not global_config.get("output_dir"):
+        raise RuntimeError("FEM validation config requires global.output_dir.")
+    if not isinstance(sweep, dict) or not sweep:
+        raise RuntimeError("FEM validation config requires a non-empty sweep section.")
+    for group_name, group in sweep.items():
+        if not isinstance(group, dict):
+            raise RuntimeError(f"Sweep group must be a mapping: {group_name}")
+        cases = group.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise RuntimeError(f"Sweep group requires a non-empty cases list: {group_name}")
+        for case in cases:
+            if not isinstance(case, dict) or not case.get("id"):
+                raise RuntimeError(f"Each FEM validation case requires an id in group {group_name}.")
+
+
+def merged_case_params(global_config: Dict[str, Any], fixed_physics: Dict[str, Any], group: Dict[str, Any], case: Dict[str, Any]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    merged.update(global_config)
+    merged.update(fixed_physics)
+    merged.update(group.get("fixed") or {})
+    merged.update(case)
+    return merged
+
+
+def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelParams, restart_dir: str, output_dir: str) -> Namespace:
+    sensor_x_over_r = params.get("sensor_x_over_r")
+    sensor_y_over_r = params.get("sensor_y_over_r")
+    sensor_x = params.get("sensor_x")
+    sensor_y = params.get("sensor_y")
+    if sensor_x is None and sensor_x_over_r is not None:
+        sensor_x = float(sensor_x_over_r) * saved_params.R
+    if sensor_y is None and sensor_y_over_r is not None:
+        sensor_y = float(sensor_y_over_r) * saved_params.R
+
+    rotate_magnetization = bool(params.get("rotate_magnetization", True))
+    return Namespace(
+        mode="magnetics-fem",
+        restart_dir=restart_dir,
+        outdir=output_dir,
+        Br=float(params.get("Br", params.get("Br_magnetic", 0.15))),
+        sensor_x=float(sensor_x if sensor_x is not None else saved_params.R),
+        sensor_y=float(sensor_y if sensor_y is not None else 0.0),
+        sensor_z=float(params.get("sensor_z", 0.0)),
+        sensor_x_over_r=sensor_x_over_r,
+        sensor_y_over_r=sensor_y_over_r,
+        no_rotate_magnetization=not rotate_magnetization,
+        air_radius_factor=float(params.get("air_radius_factor", 8.0)),
+        air_below_factor=float(params.get("air_below_factor", 4.0)),
+        air_above_factor=float(params.get("air_above_factor", 4.0)),
+        h_air=float(params.get("h_air", 100e-6)),
+    )
+
+
+def magnetic_fem_validation_summary_columns() -> List[str]:
+    return ["validation_group", "case_id", "case_description"] + magnetic_fem_summary_columns()
+
+
+def write_magnetic_fem_validation_summary(results: List[Dict[str, Any]], summary_path: str) -> None:
+    os.makedirs(os.path.dirname(summary_path), exist_ok=True)
+    columns = magnetic_fem_validation_summary_columns()
+    with open(summary_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        for result in results:
+            writer.writerow({key: result.get(key, "") for key in columns})
+
+
+def print_magnetics_fem_validation_plan_summary(config_path: str, results: List[Dict[str, Any]], summary_path: str) -> None:
+    best_norm = max(results, key=lambda r: float(r["dB_sensor_norm_uT"])) if results else None
+    best_x = max(results, key=lambda r: abs(float(r["dB_sensor_x_uT"]))) if results else None
+    best_z = max(results, key=lambda r: abs(float(r["dB_sensor_z_uT"]))) if results else None
+
+    print("\n=== MAGNETOSTATIC FEM VALIDATION PLAN SUMMARY ===")
+    print(f"config = {config_path}")
+    print(f"cases = {len(results)}")
+    print(f"csv = {summary_path}")
+    for label, result, key in (
+        ("best |dB| case", best_norm, "dB_sensor_norm_uT"),
+        ("best |dBx| case", best_x, "dB_sensor_x_uT"),
+        ("best |dBz| case", best_z, "dB_sensor_z_uT"),
+    ):
+        if result is None:
+            print(f"{label} = none")
+            continue
+        value = abs(float(result[key])) if key != "dB_sensor_norm_uT" else float(result[key])
+        print(
+            f"{label} = {result['validation_group']}/{result['case_id']}, "
+            f"{key}={value:.6g} uT, h_air={result['h_air_m']:.3e} m, "
+            f"air=[{result['air_radius_factor']}, {result['air_below_factor']}, {result['air_above_factor']}]"
+        )
+
+
+def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str, Any]]:
+    from magnetics_fem import compute_magnetostatic_fem_diagnostics
+
+    if config_path is None:
+        raise RuntimeError("--config is required for --mode magnetics-fem-validation")
+
+    config = load_magnetics_fem_validation_config(config_path)
+    validate_magnetics_fem_validation_config(config)
+
+    global_config = config["global"]
+    fixed_physics = config.get("fixed_physical_parameters") or {}
+    sweep = config["sweep"]
+    restart_dir = global_config["restart_dir"]
+    output_dir = global_config["output_dir"]
+    summary_csv = global_config.get("validation_summary_csv", "magnetic_fem_validation_summary.csv")
+
+    domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(restart_dir)
+
+    results: List[Dict[str, Any]] = []
+    for group_name, group in sweep.items():
+        for case in group["cases"]:
+            merged = merged_case_params(global_config, fixed_physics, group, case)
+            case_args = make_magnetics_fem_case_args(merged, saved_params, restart_dir, output_dir)
+            log.info(
+                "magnetics-fem validation case: group=%s, case_id=%s, h_air=%.6e, air_radius_factor=%.3f, air_below_factor=%.3f, air_above_factor=%.3f",
+                group_name,
+                case["id"],
+                case_args.h_air,
+                case_args.air_radius_factor,
+                case_args.air_below_factor,
+                case_args.air_above_factor,
+            )
+            result = compute_magnetostatic_fem_diagnostics(domain, material, u_vertices, saved_params, mechanics_result, case_args)
+            result.update(
+                {
+                    "validation_group": group_name,
+                    "case_id": case["id"],
+                    "case_description": case.get("description", ""),
+                    "air_radius_factor": case_args.air_radius_factor,
+                    "air_below_factor": case_args.air_below_factor,
+                    "air_above_factor": case_args.air_above_factor,
+                }
+            )
+            results.append(result)
+
+    summary_path = os.path.join(output_dir, summary_csv)
+    write_magnetic_fem_validation_summary(results, summary_path)
+    print_magnetics_fem_validation_plan_summary(config_path, results, summary_path)
+    return results
 
 
 def is_finite_number(value: Any) -> bool:
