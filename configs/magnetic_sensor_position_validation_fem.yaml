@@ -1,0 +1,123 @@
+# Sensor-position sensitivity check for magnetostatic FEM.
+#
+# Goal:
+# - test whether the experimental amplitude can be explained by Hall sensor
+#   position/orientation uncertainty;
+# - record best cases by |dBx|, |dBz|, and |dB|.
+
+global:
+  mode: magnetics-fem
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_sensor_position_results
+  validation_summary_csv: magnetic_sensor_position_validation_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_radius: 25.0e-6
+  sensor_average_n: 5
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
+  air_radius_factor: 12.0
+  air_below_factor: 8.0
+  air_above_factor: 4.0
+  projection_mode: cell_center
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  Br: 0.15
+  sensor_y_over_r: 0.0
+  rotate_magnetization: true
+
+sweep:
+  xs_0R:
+    fixed:
+      sensor_x_over_r: 0.0
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+
+  xs_0p5R:
+    fixed:
+      sensor_x_over_r: 0.5
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+
+  xs_1R:
+    fixed:
+      sensor_x_over_r: 1.0
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+
+  xs_1p5R:
+    fixed:
+      sensor_x_over_r: 1.5
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+
+  xs_2R:
+    fixed:
+      sensor_x_over_r: 2.0
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+
+  xs_3R:
+    fixed:
+      sensor_x_over_r: 3.0
+    cases:
+      - id: z_m2R
+        sensor_z_over_r: -2.0
+      - id: z_m1R
+        sensor_z_over_r: -1.0
+      - id: z_0R
+        sensor_z_over_r: 0.0
+      - id: z_p1R
+        sensor_z_over_r: 1.0
+      - id: z_p2R
+        sensor_z_over_r: 2.0

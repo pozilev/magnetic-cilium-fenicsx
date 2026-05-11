@@ -9,11 +9,23 @@ log = logging.getLogger("magnetic_cilium_3d")
 
 def main():
     args = parse_args()
-    log_file = setup_logging(args.outdir)
+    log_outdir = args.interpolation_output_dir if args.mode == "interpolate-magnetic-results" and args.interpolation_output_dir else args.outdir
+    log_file = setup_logging(log_outdir)
     log.info("log file = %s", log_file)
     log.info("configuration = %s", vars(args))
 
     try:
+        if args.mode == "interpolate-magnetic-results":
+            from magnetic_interpolation import run_magnetic_interpolation
+            report = run_magnetic_interpolation(args)
+            print("\n=== MAGNETIC INTERPOLATION SUMMARY ===")
+            print(f"input_csv = {report['input_csv']}")
+            print(f"filtered_rows = {report.get('filtered_rows', 0)}")
+            print(f"output_dir = {args.interpolation_output_dir}")
+            print(f"report = {os.path.join(args.interpolation_output_dir, 'interpolation_report.json')}")
+            print(f"next_points = {os.path.join(args.interpolation_output_dir, 'next_points.csv')}")
+            return
+
         check_runtime(log)
         from pipeline import (
             print_summary,

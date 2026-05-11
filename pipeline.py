@@ -27,6 +27,7 @@ from mechanics_model import (
     validate_result_quality,
 )
 from magnetics_dipoles import compute_magnetic_dipole_diagnostics, log_magnetic_diagnostics
+from magnetic_results import append_master_results, resolve_experiment_id
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -40,6 +41,21 @@ MAGNETIC_ONLY_BR_VALUES = [0.02, 0.05, 0.10, 0.15]
 MAGNETIC_ONLY_SENSOR_GAPS = [0, 25e-6, 50e-6, 100e-6, 200e-6]
 MAGNETIC_ONLY_SENSOR_X_FACTORS = [0.0, 0.5, 1.0]
 MAX_STABLE_MAGNETIC_FIELD_T = 10.0
+
+
+def infer_master_mode(config_path: str | None, default: str) -> str:
+    if not config_path:
+        return default
+    name = os.path.basename(config_path)
+    if "sensor_position" in name:
+        return "sensor_position_sweep"
+    if "sensor_average" in name:
+        return "sensor_average_sweep"
+    if "boundary" in name:
+        return "boundary_sweep"
+    if "br_scaling" in name:
+        return "br_scaling"
+    return default
 
 
 def make_json_safe(obj):
@@ -325,9 +341,20 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
     result["study"] = "magnetics_from_restart"
     outdir = args.outdir if args.outdir is not None else args.restart_dir
     os.makedirs(outdir, exist_ok=True)
-    summary_path = os.path.join(outdir, "magnetic_summary.csv")
+    summary_path = args.local_summary_path or os.path.join(outdir, "magnetic_summary.csv")
     write_summary([result], summary_path)
     print_summary([result], summary_path)
+    experiment_id = resolve_experiment_id("dipole_single", args.experiment_id, args.results_write_mode)
+    append_master_results(
+        [result],
+        master_csv_path=args.master_csv_path,
+        mode="dipole_single" if args.results_write_mode != "debug" else "debug",
+        model_type="dipole",
+        experiment_id=experiment_id,
+        config_path=args.config,
+        restart_dir=args.restart_dir,
+        max_air_cells=getattr(args, "max_air_cells", None),
+    )
     return [result]
 
 
@@ -336,7 +363,8 @@ def magnetic_fem_summary_columns() -> List[str]:
         "Br_magnetic_T",
         "magnetic_boundary",
         "sensor_average", "sensor_average_radius_m", "sensor_average_n", "sensor_average_points_used",
-        "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R",
+        "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R", "sensor_y_over_R", "sensor_z_over_R",
+        "sensor_position_case", "projection_mode",
         "air_radius_factor", "air_below_factor", "air_above_factor",
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
         "h_air_near_m", "h_air_far_m", "near_radius_factor",
@@ -347,12 +375,16 @@ def magnetic_fem_summary_columns() -> List[str]:
         "source_cells_initial", "source_cells_deformed",
         "source_volume_initial_m3", "source_volume_deformed_m3", "reference_magnetic_volume_m3",
         "source_volume_error_initial_percent", "source_volume_error_deformed_percent",
+        "epsV0_percent", "epsV1_percent",
         "source_projection_ok", "source_projection_warning", "fem_result_reliable_for_comparison",
+        "boundary_comparison_eligible",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
         "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
+        "abs_dB_sensor_x_uT", "abs_dB_sensor_y_uT", "abs_dB_sensor_z_uT", "dominant_component",
+        "dBx_per_Br_uT_per_T", "dBy_per_Br_uT_per_T", "dBz_per_Br_uT_per_T", "norm_dB_per_Br_uT_per_T",
         "reaction_force_x_uN",
-        "sensitivity_x_uT_per_uN", "sensitivity_z_uT_per_uN", "sensitivity_norm_uT_per_uN",
+        "sensitivity_x_uT_per_uN", "sensitivity_y_uT_per_uN", "sensitivity_z_uT_per_uN", "sensitivity_norm_uT_per_uN",
     ]
 
 
@@ -410,6 +442,7 @@ def print_magnetic_fem_summary(result: Dict[str, Any], summary_path: str) -> Non
     print(
         "sensitivity = "
         f"x:{result['sensitivity_x_uT_per_uN']} uT/uN, "
+        f"y:{result['sensitivity_y_uT_per_uN']} uT/uN, "
         f"z:{result['sensitivity_z_uT_per_uN']} uT/uN, "
         f"norm:{result['sensitivity_norm_uT_per_uN']} uT/uN"
     )
@@ -426,9 +459,20 @@ def run_magnetics_fem_from_restart(args) -> Dict[str, Any]:
 
     outdir = args.outdir if args.outdir is not None else args.restart_dir
     os.makedirs(outdir, exist_ok=True)
-    summary_path = os.path.join(outdir, "magnetic_fem_summary.csv")
+    summary_path = args.local_summary_path or os.path.join(outdir, "magnetic_fem_summary.csv")
     write_magnetic_fem_summary(result, summary_path)
     print_magnetic_fem_summary(result, summary_path)
+    experiment_id = resolve_experiment_id("fem_single", args.experiment_id, args.results_write_mode)
+    append_master_results(
+        [result],
+        master_csv_path=args.master_csv_path,
+        mode="fem_single" if args.results_write_mode != "debug" else "debug",
+        model_type="fem",
+        experiment_id=experiment_id,
+        config_path=args.config,
+        restart_dir=args.restart_dir,
+        max_air_cells=args.max_air_cells,
+    )
     return result
 
 
@@ -479,12 +523,16 @@ def merged_case_params(global_config: Dict[str, Any], fixed_physics: Dict[str, A
 def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelParams, restart_dir: str, output_dir: str) -> Namespace:
     sensor_x_over_r = params.get("sensor_x_over_r")
     sensor_y_over_r = params.get("sensor_y_over_r")
+    sensor_z_over_r = params.get("sensor_z_over_r")
     sensor_x = params.get("sensor_x")
     sensor_y = params.get("sensor_y")
+    sensor_z = params.get("sensor_z")
     if sensor_x is None and sensor_x_over_r is not None:
         sensor_x = float(sensor_x_over_r) * saved_params.R
     if sensor_y is None and sensor_y_over_r is not None:
         sensor_y = float(sensor_y_over_r) * saved_params.R
+    if sensor_z is None and sensor_z_over_r is not None:
+        sensor_z = float(sensor_z_over_r) * saved_params.R
 
     rotate_magnetization = bool(params.get("rotate_magnetization", True))
     return Namespace(
@@ -494,9 +542,10 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         Br=float(params.get("Br", params.get("Br_magnetic", 0.15))),
         sensor_x=float(sensor_x if sensor_x is not None else saved_params.R),
         sensor_y=float(sensor_y if sensor_y is not None else 0.0),
-        sensor_z=float(params.get("sensor_z", 0.0)),
+        sensor_z=float(sensor_z if sensor_z is not None else 0.0),
         sensor_x_over_r=sensor_x_over_r,
         sensor_y_over_r=sensor_y_over_r,
+        sensor_z_over_r=sensor_z_over_r,
         no_rotate_magnetization=not rotate_magnetization,
         air_radius_factor=float(params.get("air_radius_factor", 8.0)),
         air_below_factor=float(params.get("air_below_factor", 4.0)),
@@ -511,8 +560,14 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         sensor_average=bool(params.get("sensor_average", False)),
         sensor_average_radius=float(params.get("sensor_average_radius", 25e-6)),
         sensor_average_n=int(params.get("sensor_average_n", 5)),
+        projection_mode=str(params.get("projection_mode", "cell_center")),
         max_air_cells=int(params.get("max_air_cells", 700000)),
         allow_large_air_mesh=bool(params.get("allow_large_air_mesh", False)),
+        results_write_mode=str(params.get("results_write_mode", "debug")),
+        experiment_id=params.get("experiment_id"),
+        master_csv_path=str(params.get("master_csv_path", "results/magnetic_results_master.csv")),
+        local_summary_path=params.get("local_summary_path"),
+        config=params.get("_config_path"),
     )
 
 
@@ -534,6 +589,7 @@ def print_magnetics_fem_validation_plan_summary(config_path: str, results: List[
     best_norm = max(results, key=lambda r: float(r["dB_sensor_norm_uT"])) if results else None
     best_x = max(results, key=lambda r: abs(float(r["dB_sensor_x_uT"]))) if results else None
     best_z = max(results, key=lambda r: abs(float(r["dB_sensor_z_uT"]))) if results else None
+    unreliable = [r for r in results if not bool(r.get("fem_result_reliable_for_comparison"))]
 
     print("\n=== MAGNETOSTATIC FEM VALIDATION PLAN SUMMARY ===")
     print(f"config = {config_path}")
@@ -554,6 +610,47 @@ def print_magnetics_fem_validation_plan_summary(config_path: str, results: List[
             f"air=[{result['air_radius_factor']}, {result['air_below_factor']}, {result['air_above_factor']}], "
             f"boundary={result['magnetic_boundary']}, avg={result['sensor_average']}"
         )
+    if unreliable:
+        print("unreliable cases:")
+        for result in unreliable:
+            print(
+                f"  {result['validation_group']}/{result['case_id']}: "
+                f"epsV0={result.get('epsV0_percent', result.get('source_volume_error_initial_percent')):.6g}%, "
+                f"epsV1={result.get('epsV1_percent', result.get('source_volume_error_deformed_percent')):.6g}%, "
+                f"air_cells={result['air_cells']}"
+            )
+
+    boundary_groups: Dict[str, List[Dict[str, Any]]] = {}
+    for result in results:
+        boundary_groups.setdefault(str(result["validation_group"]), []).append(result)
+    for group_name, group_results in boundary_groups.items():
+        by_boundary = {str(r["magnetic_boundary"]): r for r in group_results}
+        natural = by_boundary.get("natural")
+        dirichlet = by_boundary.get("dirichlet_zero")
+        if natural is None or dirichlet is None:
+            continue
+        if not (natural.get("boundary_comparison_eligible") and dirichlet.get("boundary_comparison_eligible")):
+            print(f"boundary comparison {group_name}: skipped, unreliable source projection")
+            continue
+        natural_norm = float(natural["dB_sensor_norm_uT"])
+        dirichlet_norm = float(dirichlet["dB_sensor_norm_uT"])
+        rel = abs(natural_norm - dirichlet_norm) / abs(natural_norm) if abs(natural_norm) > 1e-30 else np.nan
+        print(
+            f"boundary comparison {group_name}: "
+            f"natural |dB|={natural_norm:.6g} uT, "
+            f"dirichlet_zero |dB|={dirichlet_norm:.6g} uT, "
+            f"relative difference={100.0 * rel:.3g}%"
+        )
+
+    br_results = [r for r in results if abs(float(r.get("Br_magnetic_T", 0.0) or 0.0)) > 1e-30]
+    if len({float(r["Br_magnetic_T"]) for r in br_results}) > 1:
+        ratios = np.asarray([float(r["norm_dB_per_Br_uT_per_T"]) for r in br_results], dtype=np.float64)
+        ratio_mean = float(np.mean(ratios))
+        max_rel = float(np.max(np.abs(ratios - ratio_mean)) / abs(ratio_mean)) if abs(ratio_mean) > 1e-30 else np.nan
+        print(
+            f"Br linearity check: mean |dB|/Br={ratio_mean:.6g} uT/T, "
+            f"max relative deviation={100.0 * max_rel:.3g}%"
+        )
 
 
 def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str, Any]]:
@@ -566,6 +663,7 @@ def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str,
     validate_magnetics_fem_validation_config(config)
 
     global_config = config["global"]
+    global_config["_config_path"] = config_path
     fixed_physics = config.get("fixed_physical_parameters") or {}
     sweep = config["sweep"]
     restart_dir = global_config["restart_dir"]
@@ -601,9 +699,25 @@ def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str,
             )
             results.append(result)
 
-    summary_path = os.path.join(output_dir, summary_csv)
+    summary_path = global_config.get("local_summary_path") or os.path.join(output_dir, summary_csv)
     write_magnetic_fem_validation_summary(results, summary_path)
     print_magnetics_fem_validation_plan_summary(config_path, results, summary_path)
+    master_mode = str(global_config.get("master_mode", infer_master_mode(config_path, "fem_validation")))
+    experiment_id = resolve_experiment_id(
+        master_mode,
+        global_config.get("experiment_id"),
+        str(global_config.get("results_write_mode", "debug")),
+    )
+    append_master_results(
+        results,
+        master_csv_path=str(global_config.get("master_csv_path", "results/magnetic_results_master.csv")),
+        mode=master_mode if str(global_config.get("results_write_mode", "debug")) != "debug" else "debug",
+        model_type="fem",
+        experiment_id=experiment_id,
+        config_path=config_path,
+        restart_dir=restart_dir,
+        max_air_cells=int(global_config.get("max_air_cells", 700000)),
+    )
     return results
 
 
@@ -942,6 +1056,17 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
     write_summary(results, summary_path)
     print_summary(results, summary_path)
     print_best_magnetic_validation(results, args.target_sensitivity_uT_per_uN)
+    experiment_id = resolve_experiment_id("fem_dipole_comparison", args.experiment_id, args.results_write_mode)
+    append_master_results(
+        results,
+        master_csv_path=args.master_csv_path,
+        mode="fem_dipole_comparison" if args.results_write_mode != "debug" else "debug",
+        model_type="dipole",
+        experiment_id=experiment_id,
+        config_path=args.config,
+        restart_dir=restart_dir,
+        max_air_cells=getattr(args, "max_air_cells", None),
+    )
     return results
 
 
@@ -961,6 +1086,17 @@ def run_single_pipeline_case(args) -> List[Dict[str, Any]]:
         result = {k: v for k, v in result.items() if not k.startswith("_")}
     else:
         result = run_full_case(params, 1, "final_candidate_run")
+        experiment_id = resolve_experiment_id("dipole_single", args.experiment_id, args.results_write_mode)
+        append_master_results(
+            [result],
+            master_csv_path=args.master_csv_path,
+            mode="dipole_single" if args.results_write_mode != "debug" else "debug",
+            model_type="dipole",
+            experiment_id=experiment_id,
+            config_path=args.config,
+            restart_dir=result.get("outdir", params.outdir),
+            max_air_cells=getattr(args, "max_air_cells", None),
+        )
     return [result]
 
 

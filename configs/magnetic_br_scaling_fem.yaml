@@ -1,0 +1,44 @@
+# Br-linearity sanity check for magnetostatic FEM.
+#
+# Goal:
+# - verify that dB scales linearly with the imposed remanence/magnetization;
+# - do not use this sweep for fitting Br to the experiment.
+
+global:
+  mode: magnetics-fem
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_br_scaling_results
+  validation_summary_csv: magnetic_br_scaling_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_radius: 25.0e-6
+  sensor_average_n: 5
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
+  air_radius_factor: 12.0
+  air_below_factor: 8.0
+  air_above_factor: 4.0
+  projection_mode: cell_center
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  sensor_x_over_r: 1.0
+  sensor_y_over_r: 0.0
+  sensor_z: 0.0
+  rotate_magnetization: true
+
+sweep:
+  br_scaling:
+    cases:
+      - id: Br_0p05T
+        Br: 0.05
+      - id: Br_0p10T
+        Br: 0.10
+      - id: Br_0p15T
+        Br: 0.15
+      - id: Br_0p20T
+        Br: 0.20

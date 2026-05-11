@@ -1,0 +1,69 @@
+# Boundary-condition sensitivity check for magnetostatic FEM.
+#
+# Goal:
+# - compare natural vs dirichlet_zero on identical laptop-safe graded meshes;
+# - use only cases with epsV0, epsV1 < 5% for clean open-boundary conclusions.
+
+global:
+  mode: magnetics-fem
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_boundary_validation_results
+  validation_summary_csv: magnetic_boundary_validation_summary.csv
+  sensor_average: true
+  sensor_average_radius: 25.0e-6
+  sensor_average_n: 5
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
+  projection_mode: cell_center
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  Br: 0.15
+  sensor_x_over_r: 1.0
+  sensor_y_over_r: 0.0
+  sensor_z: 0.0
+  rotate_magnetization: true
+
+sweep:
+  base_12R_8R_4R:
+    fixed:
+      air_radius_factor: 12.0
+      air_below_factor: 8.0
+      air_above_factor: 4.0
+    cases:
+      - id: natural
+        description: "Base air box, natural boundary"
+        magnetic_boundary: natural
+      - id: dirichlet_zero
+        description: "Base air box, zero scalar-potential boundary"
+        magnetic_boundary: dirichlet_zero
+
+  lateral_16R_8R_4R:
+    fixed:
+      air_radius_factor: 16.0
+      air_below_factor: 8.0
+      air_above_factor: 4.0
+    cases:
+      - id: natural
+        description: "Larger lateral air box, natural boundary"
+        magnetic_boundary: natural
+      - id: dirichlet_zero
+        description: "Larger lateral air box, zero scalar-potential boundary"
+        magnetic_boundary: dirichlet_zero
+
+  below_12R_12R_4R:
+    fixed:
+      air_radius_factor: 12.0
+      air_below_factor: 12.0
+      air_above_factor: 4.0
+    cases:
+      - id: natural
+        description: "Larger lower air box, natural boundary"
+        magnetic_boundary: natural
+      - id: dirichlet_zero
+        description: "Larger lower air box, zero scalar-potential boundary"
+        magnetic_boundary: dirichlet_zero

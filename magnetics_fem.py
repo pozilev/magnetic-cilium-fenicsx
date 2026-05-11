@@ -170,7 +170,7 @@ def tetrahedral_cell_volumes(domain) -> np.ndarray:
     return volumes
 
 
-def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.ndarray):
+def build_source_fields_cell_center(magnetic_domain, source_tets: np.ndarray, source_M: np.ndarray):
     """Tag magnetic FEM cells by center-in-deformed-tetra membership.
 
     This is a deliberately simple first baseline. It uses bounding boxes before
@@ -209,6 +209,18 @@ def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.n
     M_field.x.scatter_forward()
     log.info("magnetics-fem: tagged magnetic source cells = %d, volume=%.6e m^3", tagged, tagged_volume)
     return M_field, indicator, tagged, tagged_volume
+
+
+def build_source_fields(magnetic_domain, source_tets: np.ndarray, source_M: np.ndarray, projection_mode: str = "cell_center"):
+    """Build source fields for the selected source projection baseline.
+
+    Only the existing cell-center projection is implemented in this iteration.
+    The explicit mode keeps the current behavior stable while reserving a
+    narrow interface for a future volume-fraction projection.
+    """
+    if projection_mode == "cell_center":
+        return build_source_fields_cell_center(magnetic_domain, source_tets, source_M)
+    raise RuntimeError(f"Unknown magnetic source projection mode: {projection_mode}")
 
 
 def solve_magnetostatic_scalar_potential(
@@ -377,14 +389,19 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     air_cells = int(magnetic_domain.topology.index_map(magnetic_domain.topology.dim).size_local)
     air_vertices = int(magnetic_domain.topology.index_map(0).size_local)
 
-    M0, indicator0, tagged0, source_volume0 = build_source_fields(magnetic_domain, initial_tets, initial_M)
+    projection_mode = str(getattr(args, "projection_mode", "cell_center"))
+    M0, indicator0, tagged0, source_volume0 = build_source_fields(
+        magnetic_domain, initial_tets, initial_M, projection_mode
+    )
     _, B0 = solve_magnetostatic_scalar_potential(
         magnetic_domain, M0, indicator0, sensor_points, params, args.magnetic_boundary,
         petsc_options_prefix="magnetostatic_initial_"
     
     )
 
-    M1, indicator1, tagged1, source_volume1 = build_source_fields(magnetic_domain, deformed_tets, deformed_M)
+    M1, indicator1, tagged1, source_volume1 = build_source_fields(
+        magnetic_domain, deformed_tets, deformed_M, projection_mode
+    )
     _, B1 = solve_magnetostatic_scalar_potential(
         magnetic_domain, M1, indicator1, sensor_points, params, args.magnetic_boundary,
         petsc_options_prefix="magnetostatic_deformed_"
@@ -400,6 +417,12 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     source_projection_ok = max(source_volume_error0, source_volume_error1) <= 5.0
     source_projection_warning = max(source_volume_error0, source_volume_error1) > 20.0
     fem_result_reliable_for_comparison = bool(source_projection_ok)
+    boundary_comparison_eligible = bool(source_projection_ok)
+    sensor_position_case = (
+        f"xR={params.sensor_x / params.R:.6g},"
+        f"yR={params.sensor_y / params.R:.6g},"
+        f"zR={params.sensor_z / params.R:.6g}"
+    ) if params.R > 0.0 else ""
     if source_volume_error0 > 20.0 or source_volume_error1 > 20.0:
         log.warning(
             "Magnetic source volume projection error is large: initial=%.3f%%, deformed=%.3f%%",
@@ -417,6 +440,10 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "sensor_y_m": params.sensor_y,
         "sensor_z_m": params.sensor_z,
         "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
+        "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
+        "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
+        "sensor_position_case": sensor_position_case,
+        "projection_mode": projection_mode,
         "air_radius_factor": args.air_radius_factor,
         "air_below_factor": args.air_below_factor,
         "air_above_factor": args.air_above_factor,
@@ -444,9 +471,12 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "reference_magnetic_volume_m3": reference_volume,
         "source_volume_error_initial_percent": source_volume_error0,
         "source_volume_error_deformed_percent": source_volume_error1,
+        "epsV0_percent": source_volume_error0,
+        "epsV1_percent": source_volume_error1,
         "source_projection_ok": source_projection_ok,
         "source_projection_warning": source_projection_warning,
         "fem_result_reliable_for_comparison": fem_result_reliable_for_comparison,
+        "boundary_comparison_eligible": boundary_comparison_eligible,
         "B0_sensor_x_uT": B0[0] * 1e6,
         "B0_sensor_y_uT": B0[1] * 1e6,
         "B0_sensor_z_uT": B0[2] * 1e6,
@@ -459,8 +489,18 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "dB_sensor_y_uT": dB[1] * 1e6,
         "dB_sensor_z_uT": dB[2] * 1e6,
         "dB_sensor_norm_uT": float(np.linalg.norm(dB)) * 1e6,
+        "abs_dB_sensor_x_uT": abs(dB[0] * 1e6),
+        "abs_dB_sensor_y_uT": abs(dB[1] * 1e6),
+        "abs_dB_sensor_z_uT": abs(dB[2] * 1e6),
+        "dominant_component": ("x" if abs(dB[0]) >= abs(dB[1]) and abs(dB[0]) >= abs(dB[2])
+                               else "y" if abs(dB[1]) >= abs(dB[2]) else "z"),
+        "dBx_per_Br_uT_per_T": (dB[0] * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
+        "dBy_per_Br_uT_per_T": (dB[1] * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
+        "dBz_per_Br_uT_per_T": (dB[2] * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
+        "norm_dB_per_Br_uT_per_T": (float(np.linalg.norm(dB)) * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
         "reaction_force_x_uN": reaction_uN,
         "sensitivity_x_uT_per_uN": (dB[0] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
+        "sensitivity_y_uT_per_uN": (dB[1] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
         "sensitivity_z_uT_per_uN": (dB[2] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
         "sensitivity_norm_uT_per_uN": (float(np.linalg.norm(dB)) * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
     }
