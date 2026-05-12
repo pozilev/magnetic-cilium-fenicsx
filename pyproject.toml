@@ -42,7 +42,7 @@ py-modules = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["magnetic_cilium*", "config"]
+include = ["magnetic_cilium*"]
 
 [tool.setuptools.package-data]
 "magnetic_cilium.config" = ["presets/*.yaml", "presets/*.md"]

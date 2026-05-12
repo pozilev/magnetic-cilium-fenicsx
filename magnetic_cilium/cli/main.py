@@ -81,6 +81,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
+    _consume_wrapper_options(args)
+
     mode = LEGACY_MODE_BY_COMMAND[args.command]
     dry_run_requested = bool(args.dry_run) or "--dry-run" in args.legacy_args
     legacy_argv = ["main.py", "--mode", mode, "--config", args.config]
@@ -105,6 +107,31 @@ def _clean_remainder(values: list[str]) -> list[str]:
     if values and values[0] == "--":
         values = values[1:]
     return [value for value in values if value != "--dry-run"]
+
+
+def _consume_wrapper_options(args) -> None:
+    values = list(args.legacy_args)
+    cleaned: list[str] = []
+    i = 0
+    while i < len(values):
+        value = values[i]
+        if value == "--dry-run":
+            args.dry_run = True
+            i += 1
+            continue
+        if value == "--engine" and i + 1 < len(values):
+            args.engine = values[i + 1]
+            i += 2
+            continue
+        if value.startswith("--engine="):
+            args.engine = value.split("=", 1)[1]
+            i += 1
+            continue
+        cleaned.append(value)
+        i += 1
+    if args.engine not in {"legacy", "new"}:
+        raise SystemExit(f"invalid --engine value: {args.engine!r}")
+    args.legacy_args = cleaned
 
 
 def _run_legacy_main(legacy_argv: list[str]) -> int:

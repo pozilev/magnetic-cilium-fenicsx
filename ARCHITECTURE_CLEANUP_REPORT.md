@@ -33,10 +33,29 @@ postprocessing runs:
 - LaTeX build byproducts: `*.aux`, `*.log`, `*.fls`, `*.fdb_latexmk`,
   `*.synctex.gz`, `*.toc`, `*.out`.
 - Built report artifacts such as generated `*.pdf` and `*.docx` files.
-- Historical prototype material under `legecy/`.
+- Historical prototype material formerly stored under `legecy/` was removed
+  during the cleanup.
 - Literature/reference PDFs under `source/`.
 
-They were identified, but not deleted, to keep this migration reversible.
+Reproducible caches/build byproducts and historical prototype code were
+removed. Report deliverables and literature PDFs were kept because they are
+useful diploma materials, not runtime source code.
+
+## Removed obsolete compatibility files
+
+After `magnetic_cilium/` became self-contained, the old compatibility modules
+were removed from the source package root:
+
+- `cli/`
+- `config/`
+- `io/`
+- `tests/`
+- root `__init__.py`
+
+The root archive `magnetic_cilium_pipeline.zip` and the historical prototype
+directory `legecy/` were also removed. The legacy numerical backend files are
+kept because the architecture layer still delegates validated solver calls to
+them.
 
 ## Architecture layer status
 

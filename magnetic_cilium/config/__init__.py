@@ -1,13 +1,33 @@
-"""Configuration facade."""
-
-try:
-    from magnetic_cilium_pipeline.config import *  # noqa: F401,F403
-except ModuleNotFoundError:
-    from config import *  # type: ignore # noqa: F401,F403
-
 from .adapters import simulation_config_to_legacy_namespace, simulation_config_to_model_params
+from .loader import ConfigValidationReport, load_simulation_config, load_yaml_like, validate_config_file
+from .schema import (
+    ConfigValidationError,
+    GeometryConfig,
+    MagneticConfig,
+    MaterialConfig,
+    MechanicsConfig,
+    MeshConfig,
+    OutputConfig,
+    RunConfig,
+    SimulationConfig,
+    SweepConfig,
+)
 
 __all__ = [
-    name for name in globals()
-    if not name.startswith("_")
+    "ConfigValidationError",
+    "ConfigValidationReport",
+    "GeometryConfig",
+    "MagneticConfig",
+    "MaterialConfig",
+    "MechanicsConfig",
+    "MeshConfig",
+    "OutputConfig",
+    "RunConfig",
+    "SimulationConfig",
+    "SweepConfig",
+    "load_simulation_config",
+    "load_yaml_like",
+    "simulation_config_to_legacy_namespace",
+    "simulation_config_to_model_params",
+    "validate_config_file",
 ]
