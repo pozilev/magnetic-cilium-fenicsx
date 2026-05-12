@@ -1,5 +1,5 @@
 mode: interpolate-magnetic-results
-input_csv: results/magnetic_results_master.csv
+input_csv: ../results/magnetic_results_master.csv
 experiment_id: sensor_position_v1
 model_type: fem
 mode_filter: sensor_position_sweep
@@ -7,4 +7,4 @@ x_column: sensor_x_over_R
 z_column: sensor_z_over_R
 target_column: abs_dBx_uT
 reliable_only: true
-output_dir: results/interpolation/sensor_position
+output_dir: ../results/interpolation/sensor_position

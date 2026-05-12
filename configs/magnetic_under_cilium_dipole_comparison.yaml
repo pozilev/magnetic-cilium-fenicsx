@@ -4,9 +4,9 @@
 mode: magnetics
 results_write_mode: experiment
 experiment_id: under_cilium_fem_dipole_comparison_v1
-master_csv_path: results/magnetic_results_master.csv
-restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
-outdir: ../magnetic_cilium_3d_results_final
+master_csv_path: ../results/magnetic_results_master.csv
+restart_dir: ../results/magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+outdir: ../results/magnetic_cilium_3d_results_final
 
 Br: 0.20
 sensor_x: 0.0

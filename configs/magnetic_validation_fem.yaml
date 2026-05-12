@@ -16,8 +16,8 @@
 
 global:
   mode: magnetics-fem
-  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
-  output_dir: ../magnetic_fem_validation_results
+  restart_dir: ../results/magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../results/magnetic_fem_validation_results
   validation_summary_csv: magnetic_fem_validation_summary.csv
   magnetic_boundary: natural
   sensor_average: true

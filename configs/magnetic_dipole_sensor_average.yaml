@@ -1,6 +1,6 @@
 mode: magnetics
-restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
-outdir: ../magnetic_cilium_3d_results_final
+restart_dir: ../results/magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+outdir: ../results/magnetic_cilium_3d_results_final
 
 # Dipole baseline with the same Hall sensor geometry used by FEM.
 Br: 0.15

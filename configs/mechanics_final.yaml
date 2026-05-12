@@ -1,5 +1,5 @@
 mode: mechanics
-outdir: ../magnetic_cilium_3d_results_final
+outdir: ../results/magnetic_cilium_3d_results_final
 
 D: 120.0e-6
 L1: 2.0e-3

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from params import ModelParams, TARGET_REACTION_U_N, make_params_from_args
+from params import ModelParams, TARGET_REACTION_U_N, default_results_path, make_params_from_args
 from mechanics_model import (
     build_gmsh_mesh_3d,
     compute_J_field,
@@ -33,7 +33,7 @@ from magnetic_results import append_master_results, resolve_experiment_id
 log = logging.getLogger("magnetic_cilium_3d")
 
 DEFAULT_MAGNETIC_ONLY_RESTART_DIR = (
-    "magnetic_cilium_3d_results_final/"
+    default_results_path("magnetic_cilium_3d_results_final") + "/"
     "final_P2_hcil_20um_hsub_100um_delta_0p550mm"
 )
 
@@ -602,7 +602,7 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         allow_large_air_mesh=bool(params.get("allow_large_air_mesh", False)),
         results_write_mode=str(params.get("results_write_mode", "debug")),
         experiment_id=params.get("experiment_id"),
-        master_csv_path=str(params.get("master_csv_path", "results/magnetic_results_master.csv")),
+        master_csv_path=str(params.get("master_csv_path", default_results_path("magnetic_results_master.csv"))),
         local_summary_path=params.get("local_summary_path"),
         config=params.get("_config_path"),
     )
@@ -747,7 +747,7 @@ def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str,
     )
     append_master_results(
         results,
-        master_csv_path=str(global_config.get("master_csv_path", "results/magnetic_results_master.csv")),
+        master_csv_path=str(global_config.get("master_csv_path", default_results_path("magnetic_results_master.csv"))),
         mode=master_mode if str(global_config.get("results_write_mode", "debug")) != "debug" else "debug",
         model_type="fem",
         experiment_id=experiment_id,
@@ -1038,8 +1038,9 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
             mechanics_result.get("J_max", float("nan")),
             mechanics_result.get("von_mises_max_Pa", float("nan")),
         )
-    base_outdir = args.outdir or "magnetic_cilium_3d_results_final"
-    if args.outdir == "magnetic_cilium_3d_results_final":
+    default_final_outdir = default_results_path("magnetic_cilium_3d_results_final")
+    base_outdir = args.outdir or default_final_outdir
+    if args.outdir in {"magnetic_cilium_3d_results_final", default_final_outdir}:
         restart_parent = os.path.dirname(os.path.normpath(restart_dir))
         if os.path.basename(restart_parent) == "magnetic_cilium_3d_results_final":
             base_outdir = restart_parent

@@ -1,14 +1,14 @@
 # Experiment-mode FEM sensor-position sweep.
-# Real computed rows are appended to results/magnetic_results_master.csv.
+# Real computed rows are appended to ../results/magnetic_results_master.csv.
 
 global:
   mode: magnetics-fem
   master_mode: sensor_position_sweep
   results_write_mode: experiment
   experiment_id: sensor_position_v1
-  master_csv_path: results/magnetic_results_master.csv
-  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
-  output_dir: ../magnetic_fem_sensor_position_results
+  master_csv_path: ../results/magnetic_results_master.csv
+  restart_dir: ../results/magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../results/magnetic_fem_sensor_position_results
   validation_summary_csv: magnetic_sensor_position_validation_summary.csv
   magnetic_boundary: natural
   sensor_average: true

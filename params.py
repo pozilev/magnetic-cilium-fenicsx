@@ -15,6 +15,12 @@ except ModuleNotFoundError:
 TARGET_REACTION_U_N = 60.0
 
 
+def default_results_path(*parts: str) -> str:
+    """Return a results path outside the source tree when run from this repo."""
+    base = "../results" if os.path.basename(os.getcwd()) == "magnetic_cilium_pipeline" else "results"
+    return os.path.join(base, *parts)
+
+
 @dataclass(frozen=True)
 class ModelParams:
     # Geometry
@@ -47,7 +53,7 @@ class ModelParams:
     rotate_magnetization: bool = True
 
     # Output
-    outdir: str = "magnetic_cilium_3d_results"
+    outdir: str = default_results_path("magnetic_cilium_3d_results")
 
     @property
     def R(self) -> float:
@@ -162,9 +168,9 @@ def parse_args():
     parser.add_argument("--restart-dir", default=cfg("restart_dir", None))
     parser.add_argument("--results-write-mode", choices=["debug", "experiment"], default=cfg("results_write_mode", "debug"))
     parser.add_argument("--experiment-id", default=cfg("experiment_id", None))
-    parser.add_argument("--master-csv-path", default=cfg("master_csv_path", "results/magnetic_results_master.csv"))
+    parser.add_argument("--master-csv-path", default=cfg("master_csv_path", default_results_path("magnetic_results_master.csv")))
     parser.add_argument("--local-summary-path", default=cfg("local_summary_path", None))
-    parser.add_argument("--input-csv", default=cfg("input_csv", "results/magnetic_results_master.csv"))
+    parser.add_argument("--input-csv", default=cfg("input_csv", default_results_path("magnetic_results_master.csv")))
     parser.add_argument("--model-type", default=cfg("model_type", None))
     parser.add_argument("--mode-filter", default=cfg("mode_filter", None))
     parser.add_argument("--x-column", default=cfg("x_column", "sensor_x_over_R"))
@@ -252,14 +258,14 @@ def parse_args():
 
     if args.outdir is None:
         if args.mode == "validation":
-            args.outdir = "magnetic_cilium_3d_results_validation"
+            args.outdir = default_results_path("magnetic_cilium_3d_results_validation")
         elif args.mode == "magnetics":
             args.outdir = args.restart_dir
         else:
-            args.outdir = "magnetic_cilium_3d_results_final"
+            args.outdir = default_results_path("magnetic_cilium_3d_results_final")
     if args.mode == "interpolate-magnetic-results" and args.interpolation_output_dir is None:
         exp = args.experiment_id or "default"
-        args.interpolation_output_dir = os.path.join("results", "interpolation", exp)
+        args.interpolation_output_dir = default_results_path("interpolation", exp)
 
     return args
 

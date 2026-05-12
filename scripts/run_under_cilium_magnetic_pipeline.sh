@@ -10,7 +10,7 @@ DISTANCE_CONFIG="${DISTANCE_CONFIG:-configs/magnetic_under_cilium_distance_sweep
 DISTANCE_DIPOLE_CONFIG="${DISTANCE_DIPOLE_CONFIG:-configs/magnetic_under_cilium_distance_dipole.yaml}"
 FEM_COMPARISON_CONFIG="${FEM_COMPARISON_CONFIG:-configs/magnetic_under_cilium_fem_dipole_comparison.yaml}"
 DIPOLE_COMPARISON_CONFIG="${DIPOLE_COMPARISON_CONFIG:-configs/magnetic_under_cilium_dipole_comparison.yaml}"
-MASTER_CSV="${MASTER_CSV:-results/magnetic_results_master.csv}"
+MASTER_CSV="${MASTER_CSV:-../results/magnetic_results_master.csv}"
 
 # Set RUN_SENSOR_AREA=0, RUN_BR_AREA=0, RUN_DISTANCE_SWEEP=1, RUN_COMPARISON=0 to control stages.
 RUN_SENSOR_AREA="${RUN_SENSOR_AREA:-1}"
@@ -38,21 +38,21 @@ echo
 
 if [[ "$RUN_SENSOR_AREA" == "1" ]]; then
   echo "Running sensor-area FEM sweep..."
-  python main.py --config "$SENSOR_AREA_CONFIG" --master-csv-path "$MASTER_CSV"
+  python -m magnetic_cilium.cli.main sweep "$SENSOR_AREA_CONFIG" -- --master-csv-path "$MASTER_CSV"
 else
   echo "Skipping sensor-area FEM sweep."
 fi
 
 if [[ "$RUN_BR_AREA" == "1" ]]; then
   echo "Running Br x sensor-area FEM sweep..."
-  python main.py --config "$BR_AREA_CONFIG" --master-csv-path "$MASTER_CSV"
+  python -m magnetic_cilium.cli.main sweep "$BR_AREA_CONFIG" -- --master-csv-path "$MASTER_CSV"
 else
   echo "Skipping Br x sensor-area FEM sweep."
 fi
 
 if [[ "$RUN_DISTANCE_SWEEP" == "1" ]]; then
   echo "Running under-cilium distance FEM sweep..."
-  python main.py --config "$DISTANCE_CONFIG" --master-csv-path "$MASTER_CSV"
+  python -m magnetic_cilium.cli.main sweep "$DISTANCE_CONFIG" -- --master-csv-path "$MASTER_CSV"
 else
   echo "Skipping under-cilium distance FEM sweep."
 fi
@@ -61,7 +61,7 @@ if [[ "$RUN_DISTANCE_DIPOLE_SWEEP" == "1" ]]; then
   echo "Running under-cilium distance dipole sweep..."
   for sensor_z in -0.10e-3 -0.15e-3 -0.20e-3 -0.30e-3 -0.50e-3 -0.75e-3 -1.00e-3; do
     echo "  dipole sensor_z=$sensor_z"
-    python main.py --config "$DISTANCE_DIPOLE_CONFIG" --sensor-z="$sensor_z" --master-csv-path "$MASTER_CSV"
+    python -m magnetic_cilium.cli.main magnetics "$DISTANCE_DIPOLE_CONFIG" -- --sensor-z="$sensor_z" --master-csv-path "$MASTER_CSV"
   done
 else
   echo "Skipping under-cilium distance dipole sweep."
@@ -69,10 +69,10 @@ fi
 
 if [[ "$RUN_COMPARISON" == "1" ]]; then
   echo "Running under-cilium FEM comparison case..."
-  python main.py --config "$FEM_COMPARISON_CONFIG" --master-csv-path "$MASTER_CSV"
+  python -m magnetic_cilium.cli.main sweep "$FEM_COMPARISON_CONFIG" -- --master-csv-path "$MASTER_CSV"
 
   echo "Running under-cilium dipole comparison case..."
-  python main.py --config "$DIPOLE_COMPARISON_CONFIG" --master-csv-path "$MASTER_CSV"
+  python -m magnetic_cilium.cli.main magnetics "$DIPOLE_COMPARISON_CONFIG" -- --master-csv-path "$MASTER_CSV"
 else
   echo "Skipping FEM/dipole comparison."
 fi
@@ -80,8 +80,8 @@ fi
 echo
 echo "Done."
 echo "master_csv = $MASTER_CSV"
-echo "sensor_area_summary = ../magnetic_fem_under_cilium_sensor_area_results/magnetic_under_cilium_sensor_area_summary.csv"
-echo "br_area_summary = ../magnetic_fem_under_cilium_br_sensor_area_results/magnetic_under_cilium_br_sensor_area_summary.csv"
-echo "distance_summary = ../magnetic_fem_under_cilium_distance_results/magnetic_under_cilium_distance_summary.csv"
-echo "fem_comparison_summary = ../magnetic_fem_under_cilium_comparison_results/magnetic_under_cilium_fem_comparison_summary.csv"
-echo "dipole_summary = ../magnetic_cilium_3d_results_final/magnetic_summary.csv"
+echo "sensor_area_summary = ../results/magnetic_fem_under_cilium_sensor_area_results/magnetic_under_cilium_sensor_area_summary.csv"
+echo "br_area_summary = ../results/magnetic_fem_under_cilium_br_sensor_area_results/magnetic_under_cilium_br_sensor_area_summary.csv"
+echo "distance_summary = ../results/magnetic_fem_under_cilium_distance_results/magnetic_under_cilium_distance_summary.csv"
+echo "fem_comparison_summary = ../results/magnetic_fem_under_cilium_comparison_results/magnetic_under_cilium_fem_comparison_summary.csv"
+echo "dipole_summary = ../results/magnetic_cilium_3d_results_final/magnetic_summary.csv"
