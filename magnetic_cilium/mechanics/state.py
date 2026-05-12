@@ -21,7 +21,7 @@ class MechanicsResult:
     state: MechanicsState | None = None
 
     @classmethod
-    def from_legacy(
+    def from_result_dict(
         cls,
         values: Mapping[str, Any],
         *,

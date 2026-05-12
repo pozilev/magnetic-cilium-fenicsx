@@ -10,7 +10,7 @@ repository-level `results/` directory. Existing source configs and scripts now
 refer to those paths through `../results/...` when launched from
 `magnetic_cilium_pipeline/`.
 
-Duplicate legacy result trees named `magnetic_cilium_3d_results_final` were
+Duplicate historical result trees named `magnetic_cilium_3d_results_final` were
 kept under `results/archives/` instead of being overwritten.
 
 ## Report materials moved
@@ -53,15 +53,31 @@ were removed from the source package root:
 - root `__init__.py`
 
 The root archive `magnetic_cilium_pipeline.zip` and the historical prototype
-directory `legecy/` were also removed. The legacy numerical backend files are
-kept because the architecture layer still delegates validated solver calls to
-them.
+directory `legecy/` were also removed.
+
+## Backend code moved into package
+
+The old top-level runtime/backend modules were moved into architecture modules:
+
+- `params.py` -> `magnetic_cilium/config/params.py`
+- `logging_utils.py` -> `magnetic_cilium/io/logging_utils.py`
+- `mechanics_model.py` -> `magnetic_cilium/mechanics/backend.py`
+- `magnetics_dipoles.py` -> `magnetic_cilium/magnetics/dipole.py`
+- `magnetics_fem.py` -> `magnetic_cilium/magnetics/fem_scalar_potential.py`
+- `sensor_sampling.py` -> `magnetic_cilium/magnetics/sensor.py`
+- `magnetic_results.py` -> `magnetic_cilium/io/master_table.py`
+- `magnetic_interpolation.py` -> `magnetic_cilium/postprocess/interpolation.py`
+- `pipeline.py` -> `magnetic_cilium/pipeline/execution.py`
+- `main.py` -> `magnetic_cilium/cli/runtime.py`
+
+The compatibility shim `magnetic_cilium/_compat.py` was removed after all
+imports were rewired to package-local modules.
 
 ## Architecture layer status
 
 The current source package now includes the following architecture-level APIs:
 
-- `magnetic_cilium.config.adapters`: validated config to legacy solver params.
+- `magnetic_cilium.config.adapters`: validated config to runtime solver params.
 - `magnetic_cilium.mechanics.state`: typed `MechanicsState` and `MechanicsResult`.
 - `magnetic_cilium.magnetics.state`: typed magnetic response objects.
 - `magnetic_cilium.pipeline.full`: new orchestration layer with dry-run planning.
@@ -70,5 +86,4 @@ The current source package now includes the following architecture-level APIs:
 - `magnetic_cilium.io.master_table`: optional `master.parquet` synchronization.
 - `magnetic_cilium.visualization`: plot specifications for report figures.
 
-The numerical FEM formulas are still delegated to the validated legacy backend
-until each solver block is migrated and regression-tested independently.
+The numerical FEM formulas now live inside the `magnetic_cilium/` package.

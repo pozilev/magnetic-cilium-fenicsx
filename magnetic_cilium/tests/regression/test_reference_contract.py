@@ -15,7 +15,7 @@ class ReferenceContractTests(unittest.TestCase):
     def test_reference_fixture_matches_result_contract(self) -> None:
         with open(FIXTURE, "r", encoding="utf-8") as f:
             payload = json.load(f)
-        result = MagneticResult.from_legacy(payload["result"], model_type=payload["model_type"])
+        result = MagneticResult.from_result_dict(payload["result"], model_type=payload["model_type"])
         quality = evaluate_quality(result.values, model_type=payload["model_type"])
         self.assertTrue(quality.ok, quality.reasons)
         self.assertAlmostEqual(result.delta_B_norm_uT, 2.0615528128)

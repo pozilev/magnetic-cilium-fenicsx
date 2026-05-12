@@ -352,7 +352,7 @@ class SimulationConfig:
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any], config_path: str | None = None) -> SimulationConfig:
-        merged = _flatten_legacy_mapping(data)
+        merged = _flatten_config_mapping(data)
         geometry = GeometryConfig.from_mapping(merged)
         return cls(
             run=RunConfig.from_mapping(merged, config_path=config_path),
@@ -392,7 +392,7 @@ class SimulationConfig:
         return asdict(self)
 
 
-def _flatten_legacy_mapping(data: dict[str, Any]) -> dict[str, Any]:
+def _flatten_config_mapping(data: dict[str, Any]) -> dict[str, Any]:
     """Merge current flat YAML and nested sweep YAML into one validated view."""
     if not {"global", "fixed_physical_parameters", "sweep"}.intersection(data):
         return dict(data)

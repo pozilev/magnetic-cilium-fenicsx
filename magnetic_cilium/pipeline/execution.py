@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from params import ModelParams, TARGET_REACTION_U_N, default_results_path, make_params_from_args
-from mechanics_model import (
+from magnetic_cilium.config.params import ModelParams, TARGET_REACTION_U_N, default_results_path, make_params_from_args
+from magnetic_cilium.mechanics.backend import (
     build_gmsh_mesh_3d,
     compute_J_field,
     compute_material_volumes,
@@ -26,8 +26,8 @@ from mechanics_model import (
     solve_hyperelasticity_displacement_control_3d,
     validate_result_quality,
 )
-from magnetics_dipoles import compute_magnetic_dipole_diagnostics, log_magnetic_diagnostics
-from magnetic_results import append_master_results, resolve_experiment_id
+from magnetic_cilium.magnetics.dipole import compute_magnetic_dipole_diagnostics, log_magnetic_diagnostics
+from magnetic_cilium.io.master_table import append_master_results, resolve_experiment_id
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -488,7 +488,7 @@ def run_magnetics_fem_from_restart(args) -> Dict[str, Any]:
     if args.restart_dir is None:
         raise RuntimeError("--restart-dir is required for --mode magnetics-fem")
 
-    from magnetics_fem import compute_magnetostatic_fem_diagnostics
+    from magnetic_cilium.magnetics.fem_scalar_potential import compute_magnetostatic_fem_diagnostics
 
     domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(args.restart_dir)
     result = compute_magnetostatic_fem_diagnostics(domain, material, u_vertices, saved_params, mechanics_result, args)
@@ -691,7 +691,7 @@ def print_magnetics_fem_validation_plan_summary(config_path: str, results: List[
 
 
 def run_magnetics_fem_validation_from_config(config_path: str) -> List[Dict[str, Any]]:
-    from magnetics_fem import compute_magnetostatic_fem_diagnostics
+    from magnetic_cilium.magnetics.fem_scalar_potential import compute_magnetostatic_fem_diagnostics
 
     if config_path is None:
         raise RuntimeError("--config is required for --mode magnetics-fem-validation")

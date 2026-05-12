@@ -26,20 +26,6 @@ tables = [
 [project.scripts]
 cilium = "magnetic_cilium.cli.main:main"
 
-[tool.setuptools]
-py-modules = [
-  "logging_utils",
-  "magnetic_interpolation",
-  "magnetic_results",
-  "magnetics_dipoles",
-  "magnetics_fem",
-  "main",
-  "mechanics_model",
-  "params",
-  "pipeline",
-  "sensor_sampling",
-]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["magnetic_cilium*"]

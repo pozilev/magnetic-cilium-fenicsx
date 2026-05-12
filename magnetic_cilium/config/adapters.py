@@ -4,7 +4,7 @@ from argparse import Namespace
 from dataclasses import asdict
 from typing import Any, Mapping
 
-from magnetic_cilium._compat import legacy_attr
+from magnetic_cilium.config.params import ModelParams
 from magnetic_cilium.config.schema import SimulationConfig
 
 
@@ -13,13 +13,12 @@ def simulation_config_to_model_params(
     *,
     overrides: Mapping[str, Any] | None = None,
 ):
-    """Convert the validated architecture config to the legacy solver params.
+    """Convert the validated architecture config to runtime solver params.
 
     The numerical backend still consumes ``ModelParams``. Keeping this adapter
     explicit gives the new architecture one place where units, defaults and
-    legacy names are reconciled.
+    historical CLI names are reconciled.
     """
-    model_params_cls = legacy_attr("params", "ModelParams")
     data = {
         "D": config.geometry.D,
         "L1": config.geometry.L1,
@@ -44,16 +43,16 @@ def simulation_config_to_model_params(
     }
     if overrides:
         data.update(dict(overrides))
-    return model_params_cls(**data)
+    return ModelParams(**data)
 
 
-def simulation_config_to_legacy_namespace(
+def simulation_config_to_runtime_namespace(
     config: SimulationConfig,
     *,
     mode: str | None = None,
     overrides: Mapping[str, Any] | None = None,
 ) -> Namespace:
-    """Build an argparse-like object for legacy pipeline entry points."""
+    """Build an argparse-like object for runtime pipeline entry points."""
     params = simulation_config_to_model_params(config)
     data = asdict(params)
     data.update(

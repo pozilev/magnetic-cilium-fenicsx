@@ -1,15 +1,38 @@
 from __future__ import annotations
 
-from magnetic_cilium._compat import legacy_attr
+import numpy as np
 
 
-def make_sensor_sample_points(sensor_point, average, radius, n):
-    return legacy_attr("sensor_sampling", "make_sensor_sample_points")(sensor_point, average, radius, n)
+def make_sensor_sample_points(sensor_point: np.ndarray, average: bool, radius: float, n: int) -> np.ndarray:
+    if not average:
+        return np.asarray([sensor_point], dtype=np.float64)
+    if radius <= 0.0:
+        raise RuntimeError("--sensor-average-radius must be positive when --sensor-average is used.")
+    if n < 1:
+        raise RuntimeError("--sensor-average-n must be >= 1.")
+    if n == 1:
+        return np.asarray([sensor_point], dtype=np.float64)
+
+    offsets = np.linspace(-radius, radius, n)
+    points = []
+    for dx in offsets:
+        for dy in offsets:
+            if dx * dx + dy * dy <= radius * radius + 1e-30:
+                points.append([sensor_point[0] + dx, sensor_point[1] + dy, sensor_point[2]])
+    if not points:
+        raise RuntimeError("Sensor averaging produced no sample points.")
+    return np.asarray(points, dtype=np.float64)
 
 
-def sensor_average_requested_points(average, n):
-    return legacy_attr("sensor_sampling", "sensor_average_requested_points")(average, n)
+def sensor_average_requested_points(average: bool, n: int) -> int:
+    """Return the nominal number of sensor quadrature points before disk clipping."""
+    if not average:
+        return 1
+    return int(n) * int(n)
 
 
-def sensor_effective_area(average, radius):
-    return legacy_attr("sensor_sampling", "sensor_effective_area")(average, radius)
+def sensor_effective_area(average: bool, radius: float) -> float:
+    """Return the modeled active Hall area for disk averaging."""
+    if not average:
+        return 0.0
+    return float(np.pi * radius * radius)

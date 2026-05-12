@@ -14,7 +14,7 @@ from dolfinx import fem, io, mesh, default_scalar_type
 from dolfinx.fem import petsc as fem_petsc
 from dolfinx.nls import petsc as nls_petsc
 
-from params import ModelParams, TARGET_REACTION_U_N
+from magnetic_cilium.config.params import ModelParams, TARGET_REACTION_U_N
 
 
 log = logging.getLogger("magnetic_cilium_3d")

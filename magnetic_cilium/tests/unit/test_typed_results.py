@@ -9,7 +9,7 @@ from magnetic_cilium.postprocess.quality import evaluate_quality
 
 class TypedResultTests(unittest.TestCase):
     def test_mechanics_result_extracts_public_values(self) -> None:
-        result = MechanicsResult.from_legacy(
+        result = MechanicsResult.from_result_dict(
             {
                 "run": 1,
                 "study": "mechanics",
@@ -26,7 +26,7 @@ class TypedResultTests(unittest.TestCase):
         self.assertIsNotNone(result.state)
 
     def test_magnetic_result_extracts_sensor_vectors(self) -> None:
-        result = MagneticResult.from_legacy(
+        result = MagneticResult.from_result_dict(
             {
                 "sensor_x_m": 0.0,
                 "sensor_y_m": 0.0,

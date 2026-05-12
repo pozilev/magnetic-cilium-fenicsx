@@ -4,9 +4,6 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-from magnetic_cilium._compat import legacy_attr
-
-
 @dataclass(frozen=True)
 class QualityReport:
     ok: bool
@@ -70,11 +67,15 @@ def evaluate_quality(
 
 
 def compute_quality_flags(*args, **kwargs):
-    return legacy_attr("magnetic_results", "compute_quality_flags")(*args, **kwargs)
+    from magnetic_cilium.io.master_table import compute_quality_flags as _compute_quality_flags
+
+    return _compute_quality_flags(*args, **kwargs)
 
 
 def validate_result_quality(*args, **kwargs):
-    return legacy_attr("mechanics_model", "validate_result_quality")(*args, **kwargs)
+    from magnetic_cilium.mechanics.backend import validate_result_quality as _validate_result_quality
+
+    return _validate_result_quality(*args, **kwargs)
 
 
 def _first_number(result: Mapping[str, Any], *keys: str) -> float | None:

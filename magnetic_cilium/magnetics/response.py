@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from magnetic_cilium._compat import legacy_attr
 from magnetic_cilium.magnetics.state import MagneticResult
 from magnetic_cilium.mechanics.state import MechanicsResult
 
 
 def compute_dipole_response(*args, **kwargs):
-    raw = legacy_attr("magnetics_dipoles", "compute_magnetic_dipole_diagnostics")(*args, **kwargs)
-    return MagneticResult.from_legacy(raw, model_type="dipole")
+    from magnetic_cilium.magnetics.dipole import compute_magnetic_dipole_diagnostics
+
+    raw = compute_magnetic_dipole_diagnostics(*args, **kwargs)
+    return MagneticResult.from_result_dict(raw, model_type="dipole")
 
 
 def compute_fem_response(*args, **kwargs):
-    raw = legacy_attr("magnetics_fem", "compute_magnetostatic_fem_diagnostics")(*args, **kwargs)
-    return MagneticResult.from_legacy(raw, model_type="fem")
+    from magnetic_cilium.magnetics.fem_scalar_potential import compute_magnetostatic_fem_diagnostics
+
+    raw = compute_magnetostatic_fem_diagnostics(*args, **kwargs)
+    return MagneticResult.from_result_dict(raw, model_type="fem")
 
 
 def compute_dipole_response_from_mechanics(
@@ -26,7 +29,9 @@ def compute_dipole_response_from_mechanics(
 ) -> MagneticResult:
     if mechanics.state is None:
         raise ValueError("MechanicsResult.state is required for dipole magnetic response.")
-    raw = legacy_attr("pipeline", "run_magnetics_case_from_objects")(
+    from magnetic_cilium.pipeline.execution import run_magnetics_case_from_objects
+
+    raw = run_magnetics_case_from_objects(
         mechanics.state.domain,
         mechanics.state.material,
         mechanics.state.u_vertices,
@@ -36,4 +41,4 @@ def compute_dipole_response_from_mechanics(
         sensor_average_radius=sensor_average_radius,
         sensor_average_n=sensor_average_n,
     )
-    return MagneticResult.from_legacy(raw, model_type="dipole", run_id=run_id)
+    return MagneticResult.from_result_dict(raw, model_type="dipole", run_id=run_id)

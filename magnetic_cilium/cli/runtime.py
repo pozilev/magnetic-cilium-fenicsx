@@ -1,8 +1,8 @@
 import logging
 import os
 
-from logging_utils import setup_logging
-from params import check_runtime, parse_args
+from magnetic_cilium.io.logging_utils import setup_logging
+from magnetic_cilium.config.params import check_runtime, parse_args
 
 log = logging.getLogger("magnetic_cilium_3d")
 
@@ -16,7 +16,7 @@ def main():
 
     try:
         if args.mode == "interpolate-magnetic-results":
-            from magnetic_interpolation import run_magnetic_interpolation
+            from magnetic_cilium.postprocess.interpolation import run_magnetic_interpolation
             report = run_magnetic_interpolation(args)
             print("\n=== MAGNETIC INTERPOLATION SUMMARY ===")
             print(f"input_csv = {report['input_csv']}")
@@ -27,7 +27,7 @@ def main():
             return
 
         check_runtime(log)
-        from pipeline import (
+        from magnetic_cilium.pipeline.execution import (
             print_summary,
             run_magnetic_only_validation,
             run_magnetics_fem_validation_from_config,

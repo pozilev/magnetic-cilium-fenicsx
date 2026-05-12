@@ -5,9 +5,6 @@ import os
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from magnetic_cilium._compat import legacy_attr
-
-
 MECHANICS_RESTART_VERSION = "1.0"
 REQUIRED_RESTART_FILES = ("mechanics_restart.npz", "params.json")
 OPTIONAL_RESTART_FILES = ("mechanics_result.json", "restart_manifest.json")
@@ -101,7 +98,9 @@ def read_restart_manifest(restart_dir: str) -> RestartManifest | None:
 
 
 def save_mechanics_restart(*args, **kwargs):
-    restart_npz = legacy_attr("pipeline", "save_mechanics_restart")(*args, **kwargs)
+    from magnetic_cilium.pipeline.execution import save_mechanics_restart as _save_mechanics_restart
+
+    restart_npz = _save_mechanics_restart(*args, **kwargs)
     write_restart_manifest(os.path.dirname(restart_npz))
     return restart_npz
 
@@ -109,4 +108,6 @@ def save_mechanics_restart(*args, **kwargs):
 def load_mechanics_restart(*args, **kwargs):
     if args:
         ensure_restart_dir(str(args[0]))
-    return legacy_attr("pipeline", "load_mechanics_restart")(*args, **kwargs)
+    from magnetic_cilium.pipeline.execution import load_mechanics_restart as _load_mechanics_restart
+
+    return _load_mechanics_restart(*args, **kwargs)

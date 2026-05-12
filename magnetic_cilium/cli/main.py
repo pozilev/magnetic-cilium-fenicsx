@@ -43,12 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         run_parser.add_argument("config")
         run_parser.add_argument(
             "--engine",
-            choices=["legacy", "new"],
-            default="legacy",
-            help="Execution engine. legacy preserves the current solver path; new uses magnetic_cilium.pipeline.",
+            choices=["runtime", "new", "legacy"],
+            default="runtime",
+            help="Execution engine. runtime preserves current solver behavior; new uses magnetic_cilium.pipeline.",
         )
         run_parser.add_argument("--dry-run", action="store_true", help="Only show translated argv / plan.")
-        run_parser.add_argument("legacy_args", nargs=argparse.REMAINDER, help="Extra arguments passed to legacy main.py.")
+        run_parser.add_argument("runtime_args", nargs=argparse.REMAINDER, help="Extra arguments passed to runtime mode.")
 
     return parser
 
@@ -84,23 +84,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     _consume_wrapper_options(args)
 
     mode = LEGACY_MODE_BY_COMMAND[args.command]
-    dry_run_requested = bool(args.dry_run) or "--dry-run" in args.legacy_args
-    legacy_argv = ["main.py", "--mode", mode, "--config", args.config]
-    legacy_argv.extend(_clean_remainder(args.legacy_args))
+    dry_run_requested = bool(args.dry_run) or "--dry-run" in args.runtime_args
+    runtime_argv = ["main.py", "--mode", mode, "--config", args.config]
+    runtime_argv.extend(_clean_remainder(args.runtime_args))
 
     if dry_run_requested:
         report = validate_config_file(args.config)
         print(report.to_json())
         if args.engine == "new":
             _print_architecture_plan(args.command, args.config)
-        print("legacy argv:")
-        print(" ".join(legacy_argv))
+        print("runtime argv:")
+        print(" ".join(runtime_argv))
         return 0 if report.ok else 2
 
     if args.engine == "new":
         return _run_architecture_engine(args.command, args.config)
 
-    return _run_legacy_main(legacy_argv)
+    return _run_runtime_main(runtime_argv)
 
 
 def _clean_remainder(values: list[str]) -> list[str]:
@@ -110,7 +110,7 @@ def _clean_remainder(values: list[str]) -> list[str]:
 
 
 def _consume_wrapper_options(args) -> None:
-    values = list(args.legacy_args)
+    values = list(args.runtime_args)
     cleaned: list[str] = []
     i = 0
     while i < len(values):
@@ -129,19 +129,21 @@ def _consume_wrapper_options(args) -> None:
             continue
         cleaned.append(value)
         i += 1
-    if args.engine not in {"legacy", "new"}:
+    if args.engine == "legacy":
+        args.engine = "runtime"
+    if args.engine not in {"runtime", "new"}:
         raise SystemExit(f"invalid --engine value: {args.engine!r}")
-    args.legacy_args = cleaned
+    args.runtime_args = cleaned
 
 
-def _run_legacy_main(legacy_argv: list[str]) -> int:
-    _ensure_legacy_root()
+def _run_runtime_main(runtime_argv: list[str]) -> int:
+    _ensure_runtime_root()
     previous_argv = sys.argv[:]
     try:
-        sys.argv = legacy_argv
-        from main import main as legacy_main
+        sys.argv = runtime_argv
+        from magnetic_cilium.cli.runtime import main as runtime_main
 
-        legacy_main()
+        runtime_main()
     finally:
         sys.argv = previous_argv
     return 0
@@ -190,7 +192,7 @@ def _run_architecture_engine(command: str, config_path: str) -> int:
     raise RuntimeError(f"Architecture engine does not support command: {command}")
 
 
-def _ensure_legacy_root() -> None:
+def _ensure_runtime_root() -> None:
     package_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if package_root not in sys.path:
         sys.path.insert(0, package_root)

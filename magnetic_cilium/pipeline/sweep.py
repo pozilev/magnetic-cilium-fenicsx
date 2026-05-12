@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from magnetic_cilium._compat import legacy_attr
 from magnetic_cilium.config.loader import load_simulation_config
 
 
 def run_magnetics_fem_validation_from_config(*args, **kwargs):
-    return legacy_attr("pipeline", "run_magnetics_fem_validation_from_config")(*args, **kwargs)
+    from magnetic_cilium.pipeline.execution import (
+        run_magnetics_fem_validation_from_config as _run_magnetics_fem_validation_from_config,
+    )
+
+    return _run_magnetics_fem_validation_from_config(*args, **kwargs)
 
 
 def run_validation_study(*args, **kwargs):
-    return legacy_attr("pipeline", "run_validation_study")(*args, **kwargs)
+    from magnetic_cilium.pipeline.execution import run_validation_study as _run_validation_study
+
+    return _run_validation_study(*args, **kwargs)
 
 
 def build_sweep_plan(config_or_path):

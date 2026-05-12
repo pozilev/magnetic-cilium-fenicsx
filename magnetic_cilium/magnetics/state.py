@@ -35,7 +35,7 @@ class SensorResponse:
     values: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_legacy(cls, values: Mapping[str, Any]) -> "SensorResponse":
+    def from_result_dict(cls, values: Mapping[str, Any]) -> "SensorResponse":
         return cls(
             sensor_position_m=(
                 _optional_float(values.get("sensor_x_m")),
@@ -78,7 +78,7 @@ class MagneticResult:
     sensor_response: SensorResponse | None = None
 
     @classmethod
-    def from_legacy(
+    def from_result_dict(
         cls,
         values: Mapping[str, Any],
         *,
@@ -90,7 +90,7 @@ class MagneticResult:
             model_type=model_type,
             run_id=run_id,
             values=public_values,
-            sensor_response=SensorResponse.from_legacy(public_values),
+            sensor_response=SensorResponse.from_result_dict(public_values),
         )
 
     @property

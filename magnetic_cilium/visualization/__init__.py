@@ -1,8 +1,4 @@
-"""Visualization module namespace.
-
-Current report plots are produced by legacy postprocessing. Dedicated
-visualization functions can be added here without changing solver code.
-"""
+"""Visualization module namespace."""
 from .geometry import geometry_plot_specs
 from .magnetics import magnetics_plot_specs
 from .mechanics import mechanics_plot_specs
