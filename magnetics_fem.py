@@ -335,6 +335,27 @@ def compute_near_field_radius(params: ModelParams, initial_tets: np.ndarray, def
     )
 
 
+def sensor_air_box_diagnostics(
+        sensor_point: np.ndarray,
+        sensor_average: bool,
+        sensor_average_radius: float,
+        air_radius: float,
+        air_below: float,
+        air_above: float,
+        cilium_length: float,
+    ) -> Tuple[bool, float]:
+    """Check whether the Hall point or averaging disk is inside the FEM air box."""
+    disk_radius = float(sensor_average_radius) if bool(sensor_average) else 0.0
+    margins = [
+        air_radius - (abs(float(sensor_point[0])) + disk_radius),
+        air_radius - (abs(float(sensor_point[1])) + disk_radius),
+        float(sensor_point[2]) + air_below,
+        cilium_length + air_above - float(sensor_point[2]),
+    ]
+    margin = float(min(margins))
+    return margin >= -1.0e-15, margin
+
+
 def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices, saved_params: ModelParams, mechanics_result: Dict[str, Any], args) -> Dict[str, Any]:
     params_dict = asdict(saved_params)
     params_dict["Br_magnetic"] = args.Br
@@ -354,6 +375,23 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     initial_tets, initial_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=False)
     deformed_tets, deformed_M = mechanical_magnetic_tets(mechanics_domain, material, u_vertices, params, deformed=True)
     air_radius, air_below, air_above = compute_air_box_dimensions(params, initial_tets, deformed_tets, args)
+    sensor_inside_air_box, sensor_margin_to_air_boundary = sensor_air_box_diagnostics(
+        sensor_point,
+        bool(args.sensor_average),
+        float(args.sensor_average_radius),
+        air_radius,
+        air_below,
+        air_above,
+        params.L,
+    )
+    if not sensor_inside_air_box:
+        raise RuntimeError(
+            "Sensor point/averaging disk is outside magnetic FEM air box: "
+            f"sensor={sensor_point.tolist()}, radius={float(args.sensor_average_radius):.6e} m, "
+            f"air_radius={air_radius:.6e} m, air_below={air_below:.6e} m, "
+            f"air_above={air_above:.6e} m, margin={sensor_margin_to_air_boundary:.6e} m. "
+            "Increase air_radius_factor or air_below_factor/air_above_factor."
+        )
     near_radius = compute_near_field_radius(params, initial_tets, deformed_tets, sensor_point, args)
     near_radius = min(near_radius, air_radius)
     near_radius_to_air_radius = near_radius / air_radius if air_radius > 0.0 else np.inf
@@ -452,6 +490,9 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "sensor_x_m": params.sensor_x,
         "sensor_y_m": params.sensor_y,
         "sensor_z_m": params.sensor_z,
+        "sensor_depth_mm": -1000.0 * params.sensor_z,
+        "sensor_inside_air_box": sensor_inside_air_box,
+        "sensor_margin_to_air_boundary_m": sensor_margin_to_air_boundary,
         "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
         "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
         "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
@@ -514,6 +555,7 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "reaction_force_x_uN": reaction_uN,
         "target_sensitivity_uT_per_uN": target_sensitivity,
         "target_dB_uT": target_dB_uT,
+        "target_ratio_norm": (dB_norm_uT / target_dB_uT) if abs(target_dB_uT) > 1e-30 else "",
         "required_Br_for_target_norm_T": required_Br_norm,
         "required_Br_ratio_norm": (
             required_Br_norm / params.Br_magnetic

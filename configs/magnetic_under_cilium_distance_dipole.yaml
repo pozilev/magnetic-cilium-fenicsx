@@ -1,0 +1,22 @@
+# Dipole baseline for the under-cilium distance check.
+#
+# This config defines the common physical parameters. A distance sweep can be
+# run with the existing CLI by overriding --sensor-z in a small shell loop.
+
+mode: magnetics
+results_write_mode: experiment
+experiment_id: under_cilium_distance_v1
+master_csv_path: results/magnetic_results_master.csv
+restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+outdir: ../magnetic_cilium_3d_results_final
+
+Br: 0.20
+sensor_x: 0.0
+sensor_y: 0.0
+sensor_z: -1.0e-3
+rotate_magnetization: true
+
+sensor_average: true
+sensor_average_radius: 50.0e-6
+sensor_average_n: 13
+target_sensitivity_uT_per_uN: 0.63

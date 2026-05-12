@@ -169,7 +169,7 @@ def summary_columns() -> List[str]:
         "dBx_T", "dBy_T", "dBz_T",
         "deltaB_norm_T", "relative_deltaB",
         "abs_dB_x_uT", "abs_dB_z_uT", "dominant_component", "sensor_y_over_R",
-        "target_sensitivity_uT_per_uN", "target_dB_uT", "required_Br_for_target_x_T",
+        "target_sensitivity_uT_per_uN", "target_dB_uT", "target_ratio_norm", "required_Br_for_target_x_T",
         "required_Br_for_target_z_T", "required_Br_for_target_norm_T", "required_Br_ratio_norm",
         "under_cilium_sensor_case_ok",
         "is_valid", "rank_by_deltaB_norm", "rank_by_abs_dBz",
@@ -355,8 +355,13 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
             "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
             "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
             "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
+            "sensor_depth_mm": -1000.0 * params.sensor_z,
             "target_sensitivity_uT_per_uN": args.target_sensitivity_uT_per_uN,
             "target_dB_uT": target_signal_uT,
+            "target_ratio_norm": (
+                float(result["dB_sensor_norm_uT"]) / target_signal_uT
+                if abs(target_signal_uT) > 1e-30 else None
+            ),
             "required_Br_for_target_norm_T": required_Br_norm,
             "required_Br_ratio_norm": (
                 required_Br_norm / float(result["Br_magnetic_T"])
@@ -390,7 +395,9 @@ def magnetic_fem_summary_columns() -> List[str]:
         "magnetic_boundary",
         "sensor_average", "sensor_average_radius_m", "sensor_average_n",
         "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
-        "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R", "sensor_y_over_R", "sensor_z_over_R",
+        "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_depth_mm",
+        "sensor_inside_air_box", "sensor_margin_to_air_boundary_m",
+        "sensor_x_over_R", "sensor_y_over_R", "sensor_z_over_R",
         "sensor_position_case", "projection_mode",
         "air_radius_factor", "air_below_factor", "air_above_factor",
         "air_radius_m", "air_below_m", "air_above_m", "h_air_m",
@@ -411,7 +418,7 @@ def magnetic_fem_summary_columns() -> List[str]:
         "abs_dB_sensor_x_uT", "abs_dB_sensor_y_uT", "abs_dB_sensor_z_uT", "dominant_component",
         "dBx_per_Br_uT_per_T", "dBy_per_Br_uT_per_T", "dBz_per_Br_uT_per_T", "norm_dB_per_Br_uT_per_T",
         "reaction_force_x_uN",
-        "target_sensitivity_uT_per_uN", "target_dB_uT",
+        "target_sensitivity_uT_per_uN", "target_dB_uT", "target_ratio_norm",
         "required_Br_for_target_norm_T", "required_Br_ratio_norm", "under_cilium_sensor_case_ok",
         "sensitivity_x_uT_per_uN", "sensitivity_y_uT_per_uN", "sensitivity_z_uT_per_uN", "sensitivity_norm_uT_per_uN",
     ]
@@ -843,8 +850,13 @@ def add_magnetic_only_aliases(
             "abs_dB_z_uT": abs_dBz_uT,
             "dominant_component": "x" if abs_dBx_uT >= abs_dBz_uT else "z",
             "sensor_y_over_R": sensor_y_over_R,
+            "sensor_depth_mm": 1000.0 * sensor_gap,
             "target_sensitivity_uT_per_uN": target_sensitivity_uT_per_uN,
             "target_dB_uT": target_signal_uT,
+            "target_ratio_norm": (
+                float(result["dB_sensor_norm_uT"]) / target_signal_uT
+                if abs(target_signal_uT) > 1e-30 else None
+            ),
             "required_Br_for_target_x_T": required_Br_for_target(
                 float(result["Br_magnetic_T"]), float(result["dB_sensor_x_uT"]), target_signal_uT
             ),
