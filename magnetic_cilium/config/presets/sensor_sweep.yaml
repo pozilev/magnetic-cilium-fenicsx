@@ -1,0 +1,27 @@
+global:
+  mode: magnetics-fem-validation
+  master_mode: sensor_position_sweep
+  results_write_mode: experiment
+  experiment_id: sensor_position_preset
+  master_csv_path: ../results/magnetic_results_master.csv
+  restart_dir: ../results/magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../results/magnetic_fem_sensor_position_results
+  validation_summary_csv: magnetic_sensor_position_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_radius: 25.0e-6
+  sensor_average_n: 5
+
+fixed_physical_parameters:
+  Br: 0.10
+  sensor_y: 0.0
+
+sweep:
+  sensor_position:
+    cases:
+      - id: center_z_50um
+        sensor_x_over_r: 0.0
+        sensor_z: -50.0e-6
+      - id: center_z_100um
+        sensor_x_over_r: 0.0
+        sensor_z: -100.0e-6

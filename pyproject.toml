@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magnetic-cilium"
+version = "0.2.0"
+description = "FEM and magnetic postprocessing pipeline for a two-layer magnetic cilium Hall sensor model."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+fem = [
+  "dolfinx",
+  "mpi4py",
+  "gmsh",
+]
+tables = [
+  "pandas",
+  "pyarrow",
+]
+
+[project.scripts]
+cilium = "magnetic_cilium.cli.main:main"
+
+[tool.setuptools]
+py-modules = [
+  "logging_utils",
+  "magnetic_interpolation",
+  "magnetic_results",
+  "magnetics_dipoles",
+  "magnetics_fem",
+  "main",
+  "mechanics_model",
+  "params",
+  "pipeline",
+  "sensor_sampling",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["magnetic_cilium*", "config"]
+
+[tool.setuptools.package-data]
+"magnetic_cilium.config" = ["presets/*.yaml", "presets/*.md"]
+"magnetic_cilium.tests.regression" = ["*.json"]

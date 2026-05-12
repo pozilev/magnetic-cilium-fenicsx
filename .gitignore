@@ -23,11 +23,8 @@ dist/
 # Logs
 *.log
 
-# LaTeX sources and final PDFs
-magnetic_cilium_tex/*
-!magnetic_cilium_tex/**/
-!magnetic_cilium_tex/*.tex
-!magnetic_cilium_tex/*.pdf
+# LaTeX report sources are stored outside this source package:
+# ../magnetic_cilium/magnetic_cilium_tex/
 
 # Paraview / simulation outputs
 results/

@@ -1,0 +1,22 @@
+mode: mechanics
+outdir: ../results/magnetic_cilium_3d_results_debug
+results_write_mode: debug
+experiment_id: debug_small
+
+D: 120.0e-6
+L1: 2.0e-3
+L2: 2.0e-3
+substrate_radius: 0.60e-3
+substrate_thickness: 0.50e-3
+
+h_cilium: 60.0e-6
+h_substrate: 120.0e-6
+element_degree: 1
+n_steps: 2
+delta: 0.10e-3
+
+Br: 0.10
+sensor_x: 0.0
+sensor_y: 0.0
+sensor_z: -50.0e-6
+rotate_magnetization: true

@@ -1,0 +1,23 @@
+{
+  "case_id": "contract_only_reference",
+  "model_type": "dipole",
+  "description": "Small deterministic fixture for result schema regression tests; not a FEM benchmark.",
+  "result": {
+    "sensor_x_m": 0.0,
+    "sensor_y_m": 0.0,
+    "sensor_z_m": -5e-05,
+    "B0_sensor_x_uT": 1.0,
+    "B0_sensor_y_uT": 0.0,
+    "B0_sensor_z_uT": 10.0,
+    "B1_sensor_x_uT": 1.5,
+    "B1_sensor_y_uT": 0.0,
+    "B1_sensor_z_uT": 12.0,
+    "dB_sensor_x_uT": 0.5,
+    "dB_sensor_y_uT": 0.0,
+    "dB_sensor_z_uT": 2.0,
+    "dB_sensor_norm_uT": 2.0615528128,
+    "J_min": 0.95,
+    "J_max": 1.08,
+    "von_mises_max_Pa": 1000.0
+  }
+}
