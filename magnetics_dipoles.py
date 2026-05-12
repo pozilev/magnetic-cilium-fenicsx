@@ -5,7 +5,7 @@ import numpy as np
 from mpi4py import MPI
 
 from params import ModelParams
-from sensor_sampling import make_sensor_sample_points
+from sensor_sampling import make_sensor_sample_points, sensor_average_requested_points, sensor_effective_area
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -134,7 +134,9 @@ def compute_B_from_magnetic_layer_dipoles(
         "sensor_average": bool(sensor_average),
         "sensor_average_radius_m": float(sensor_average_radius),
         "sensor_average_n": int(sensor_average_n),
+        "sensor_average_points_requested": sensor_average_requested_points(bool(sensor_average), int(sensor_average_n)),
         "sensor_average_points_used": int(sensor_points.shape[0]),
+        "sensor_area_effective_m2": sensor_effective_area(bool(sensor_average), float(sensor_average_radius)),
         "magnetic_dipole_cells": domain.comm.allreduce(magnetic_cells, op=MPI.SUM),
         "magnetic_dipole_volume_m3": domain.comm.allreduce(magnetic_volume, op=MPI.SUM),
         "magnetic_min_distance_to_sensor_m": domain.comm.allreduce(min_R, op=MPI.MIN),

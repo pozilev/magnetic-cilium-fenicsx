@@ -1,0 +1,108 @@
+# Refined FEM sensor-position sweep above the previous z/R boundary maximum.
+# Real computed rows are appended to results/magnetic_results_master.csv.
+
+global:
+  mode: magnetics-fem
+  master_mode: sensor_position_sweep
+  results_write_mode: experiment
+  experiment_id: sensor_position_refine_z_v1
+  master_csv_path: results/magnetic_results_master.csv
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_sensor_position_refine_z_results
+  validation_summary_csv: magnetic_sensor_position_refine_z_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_radius: 25.0e-6
+  sensor_average_n: 5
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
+  air_radius_factor: 12.0
+  air_below_factor: 8.0
+  air_above_factor: 4.0
+  projection_mode: cell_center
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  Br: 0.15
+  sensor_y_over_r: 0.0
+  rotate_magnetization: true
+
+sweep:
+  xs_1R:
+    fixed:
+      sensor_x_over_r: 1.0
+    cases:
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+      - id: z_p2p5R
+        sensor_z_over_r: 2.5
+      - id: z_p3R
+        sensor_z_over_r: 3.0
+      - id: z_p3p5R
+        sensor_z_over_r: 3.5
+      - id: z_p4R
+        sensor_z_over_r: 4.0
+
+  xs_1p5R:
+    fixed:
+      sensor_x_over_r: 1.5
+    cases:
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+      - id: z_p2p5R
+        sensor_z_over_r: 2.5
+      - id: z_p3R
+        sensor_z_over_r: 3.0
+      - id: z_p3p5R
+        sensor_z_over_r: 3.5
+      - id: z_p4R
+        sensor_z_over_r: 4.0
+
+  xs_2R:
+    fixed:
+      sensor_x_over_r: 2.0
+    cases:
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+      - id: z_p2p5R
+        sensor_z_over_r: 2.5
+      - id: z_p3R
+        sensor_z_over_r: 3.0
+      - id: z_p3p5R
+        sensor_z_over_r: 3.5
+      - id: z_p4R
+        sensor_z_over_r: 4.0
+
+  xs_2p5R:
+    fixed:
+      sensor_x_over_r: 2.5
+    cases:
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+      - id: z_p2p5R
+        sensor_z_over_r: 2.5
+      - id: z_p3R
+        sensor_z_over_r: 3.0
+      - id: z_p3p5R
+        sensor_z_over_r: 3.5
+      - id: z_p4R
+        sensor_z_over_r: 4.0
+
+  xs_3R:
+    fixed:
+      sensor_x_over_r: 3.0
+    cases:
+      - id: z_p2R
+        sensor_z_over_r: 2.0
+      - id: z_p2p5R
+        sensor_z_over_r: 2.5
+      - id: z_p3R
+        sensor_z_over_r: 3.0
+      - id: z_p3p5R
+        sensor_z_over_r: 3.5
+      - id: z_p4R
+        sensor_z_over_r: 4.0

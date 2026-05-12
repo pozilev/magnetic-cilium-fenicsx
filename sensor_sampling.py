@@ -22,3 +22,17 @@ def make_sensor_sample_points(sensor_point: np.ndarray, average: bool, radius: f
     if not points:
         raise RuntimeError("Sensor averaging produced no sample points.")
     return np.asarray(points, dtype=np.float64)
+
+
+def sensor_average_requested_points(average: bool, n: int) -> int:
+    """Return the nominal number of sensor quadrature points before disk clipping."""
+    if not average:
+        return 1
+    return int(n) * int(n)
+
+
+def sensor_effective_area(average: bool, radius: float) -> float:
+    """Return the modeled active Hall area for disk averaging."""
+    if not average:
+        return 0.0
+    return float(np.pi * radius * radius)

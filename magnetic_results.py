@@ -19,8 +19,9 @@ MASTER_COLUMNS = [
     "run_id", "experiment_id", "timestamp", "mode", "model_type", "config_name", "config_hash",
     "restart_path", "params_path", "mechanics_result_path", "git_commit",
     "Br_T", "M_magnitude_A_per_m", "magnetization_mode", "rotate_magnetization",
-    "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R", "sensor_z_over_R",
+    "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R", "sensor_y_over_R", "sensor_z_over_R",
     "sensor_average", "sensor_average_radius_m", "sensor_average_n",
+    "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
     "magnetic_boundary", "Rair_m", "Rair_over_R", "air_below_m", "air_below_over_R",
     "air_above_m", "air_above_over_R", "h_air_m", "hnear_m", "hfar_m",
     "Rnear_m", "Rnear_over_R", "Rnear_over_Rair", "near_radius_saturates_air_box",
@@ -33,8 +34,11 @@ MASTER_COLUMNS = [
     "abs_dBx_uT", "abs_dBy_uT", "abs_dBz_uT",
     "reaction_force_x_N", "reaction_force_x_uN",
     "Sx_uT_per_uN", "Sy_uT_per_uN", "Sz_uT_per_uN", "Snorm_uT_per_uN",
+    "target_sensitivity_uT_per_uN", "target_dB_uT",
+    "required_Br_for_target_norm_T", "required_Br_ratio_norm",
     "solver_success", "reliable", "fem_result_reliable_for_comparison",
-    "boundary_comparison_ok", "br_linearity_case_ok", "sensor_position_case_ok", "quality_reason",
+    "boundary_comparison_ok", "br_linearity_case_ok", "sensor_position_case_ok",
+    "under_cilium_sensor_case_ok", "quality_reason",
 ]
 
 
@@ -142,6 +146,17 @@ def compute_quality_flags(result: Dict[str, Any], model_type: str, max_air_cells
         reliable and model_type == "fem" and epsV0 is not None and epsV1 is not None
         and epsV0 < 5.0 and epsV1 < 5.0
     )
+    under_cilium_sensor_case_ok = False
+    try:
+        under_cilium_sensor_case_ok = (
+            abs(float(result_value(result, "sensor_x_m", default=1.0))) <= 1.0e-12
+            and abs(float(result_value(result, "sensor_y_m", default=1.0))) <= 1.0e-12
+            and abs(float(result_value(result, "sensor_z_m", default=0.0)) + 1.0e-3) <= 1.0e-12
+            and as_bool(result.get("sensor_average"), False)
+            and reliable
+        )
+    except (TypeError, ValueError):
+        under_cilium_sensor_case_ok = False
     return {
         "solver_success": solver_success,
         "laptop_safe": laptop_safe,
@@ -151,6 +166,7 @@ def compute_quality_flags(result: Dict[str, Any], model_type: str, max_air_cells
         "boundary_comparison_ok": fem_reliable if model_type == "fem" else "",
         "br_linearity_case_ok": reliable,
         "sensor_position_case_ok": reliable,
+        "under_cilium_sensor_case_ok": under_cilium_sensor_case_ok,
         "quality_reason": reason,
     }
 
@@ -184,6 +200,12 @@ def build_magnetic_master_row(
         value = as_float_or_none(result.get(key))
         return value * 1e-6 if value is not None else ""
 
+    Br_req_norm = result_value(result, "required_Br_for_target_norm_T")
+    Br_req_norm_float = as_float_or_none(Br_req_norm)
+    Br_ratio_norm = result_value(result, "required_Br_ratio_norm")
+    if Br_ratio_norm == "" and Br_req_norm_float is not None and Br_float is not None and abs(Br_float) > 1e-30:
+        Br_ratio_norm = Br_req_norm_float / Br_float
+
     row = {
         "run_id": make_run_id(model_type),
         "experiment_id": experiment_id,
@@ -204,10 +226,14 @@ def build_magnetic_master_row(
         "sensor_y_m": result_value(result, "sensor_y_m"),
         "sensor_z_m": result_value(result, "sensor_z_m"),
         "sensor_x_over_R": result_value(result, "sensor_x_over_R", "sensor_x_over_r"),
+        "sensor_y_over_R": result_value(result, "sensor_y_over_R", "sensor_y_over_r"),
         "sensor_z_over_R": result_value(result, "sensor_z_over_R", "sensor_z_over_r"),
         "sensor_average": result_value(result, "sensor_average", default=False),
         "sensor_average_radius_m": result_value(result, "sensor_average_radius_m"),
         "sensor_average_n": result_value(result, "sensor_average_n"),
+        "sensor_average_points_requested": result_value(result, "sensor_average_points_requested"),
+        "sensor_average_points_used": result_value(result, "sensor_average_points_used"),
+        "sensor_area_effective_m2": result_value(result, "sensor_area_effective_m2"),
         "magnetic_boundary": result_value(result, "magnetic_boundary"),
         "Rair_m": result_value(result, "air_radius_m", "Rair_m"),
         "Rair_over_R": result_value(result, "air_radius_factor", "Rair_over_R"),
@@ -257,6 +283,10 @@ def build_magnetic_master_row(
         "Sy_uT_per_uN": result_value(result, "sensitivity_y_uT_per_uN"),
         "Sz_uT_per_uN": result_value(result, "sensitivity_z_uT_per_uN"),
         "Snorm_uT_per_uN": result_value(result, "sensitivity_norm_uT_per_uN"),
+        "target_sensitivity_uT_per_uN": result_value(result, "target_sensitivity_uT_per_uN"),
+        "target_dB_uT": result_value(result, "target_dB_uT"),
+        "required_Br_for_target_norm_T": Br_req_norm,
+        "required_Br_ratio_norm": Br_ratio_norm,
     }
     row.update(quality)
     return {key: row.get(key, "") for key in MASTER_COLUMNS}
@@ -265,6 +295,19 @@ def build_magnetic_master_row(
 def append_master_result(row: Dict[str, Any], master_csv_path: str) -> None:
     """Append one computed magnetic result to the master CSV."""
     os.makedirs(os.path.dirname(master_csv_path) or ".", exist_ok=True)
+    if os.path.exists(master_csv_path) and os.path.getsize(master_csv_path) > 0:
+        with open(master_csv_path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            existing_columns = reader.fieldnames or []
+            if existing_columns != MASTER_COLUMNS:
+                old_rows = list(reader)
+        if os.path.exists(master_csv_path) and existing_columns != MASTER_COLUMNS:
+            with open(master_csv_path, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=MASTER_COLUMNS)
+                writer.writeheader()
+                for old_row in old_rows:
+                    writer.writerow({key: old_row.get(key, "") for key in MASTER_COLUMNS})
+            log.info("master magnetic CSV schema upgraded: %s", master_csv_path)
     write_header = not os.path.exists(master_csv_path) or os.path.getsize(master_csv_path) == 0
     with open(master_csv_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=MASTER_COLUMNS)

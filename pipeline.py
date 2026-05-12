@@ -37,6 +37,8 @@ DEFAULT_MAGNETIC_ONLY_RESTART_DIR = (
     "final_P2_hcil_20um_hsub_100um_delta_0p550mm"
 )
 
+UNDER_CILIUM_SENSOR_Z_M = -1.0e-3
+UNDER_CILIUM_SENSOR_TOL_M = 1.0e-12
 MAGNETIC_ONLY_BR_VALUES = [0.02, 0.05, 0.10, 0.15]
 MAGNETIC_ONLY_SENSOR_GAPS = [0, 25e-6, 50e-6, 100e-6, 200e-6]
 MAGNETIC_ONLY_SENSOR_X_FACTORS = [0.0, 0.5, 1.0]
@@ -55,6 +57,8 @@ def infer_master_mode(config_path: str | None, default: str) -> str:
         return "boundary_sweep"
     if "br_scaling" in name:
         return "br_scaling"
+    if "under_cilium" in name:
+        return "under_cilium_sensor_sweep"
     return default
 
 
@@ -145,7 +149,8 @@ def summary_columns() -> List[str]:
         "volume_substrate_m3", "volume_lower_m3", "volume_upper_m3", "expected_layer_volume_m3",
         "lower_volume_rel_error_percent", "upper_volume_rel_error_percent", "restart_file",
         "Br_magnetic_T", "M_magnetic_A_per_m", "sensor_x_m", "sensor_y_m", "sensor_z_m", "rotate_magnetization",
-        "sensor_average", "sensor_average_radius_m", "sensor_average_n", "sensor_average_points_used",
+        "sensor_average", "sensor_average_radius_m", "sensor_average_n",
+        "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
         "magnetic_dipole_cells", "magnetic_dipole_volume_m3", "magnetic_initial_volume_m3", "magnetic_deformed_volume_m3",
         "magnetic_min_distance_to_sensor_m", "magnetic_skipped_near_cells",
         "B0_sensor_x_T", "B0_sensor_y_T", "B0_sensor_z_T", "B0_sensor_norm_T",
@@ -164,8 +169,9 @@ def summary_columns() -> List[str]:
         "dBx_T", "dBy_T", "dBz_T",
         "deltaB_norm_T", "relative_deltaB",
         "abs_dB_x_uT", "abs_dB_z_uT", "dominant_component", "sensor_y_over_R",
-        "target_sensitivity_uT_per_uN", "required_Br_for_target_x_T",
-        "required_Br_for_target_z_T", "required_Br_for_target_norm_T",
+        "target_sensitivity_uT_per_uN", "target_dB_uT", "required_Br_for_target_x_T",
+        "required_Br_for_target_z_T", "required_Br_for_target_norm_T", "required_Br_ratio_norm",
+        "under_cilium_sensor_case_ok",
         "is_valid", "rank_by_deltaB_norm", "rank_by_abs_dBz",
         "run_params_json", "pvd_file",
     ]
@@ -339,6 +345,26 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
         sensor_average_n=int(args.sensor_average_n),
     )
     result["study"] = "magnetics_from_restart"
+    reaction_uN = float(result.get("reaction_force_x_uN", mechanics_result.get("reaction_force_x_uN", 0.0)) or 0.0)
+    target_signal_uT = float(args.target_sensitivity_uT_per_uN) * reaction_uN
+    required_Br_norm = required_Br_for_target(
+        float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
+    )
+    result.update(
+        {
+            "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
+            "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
+            "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
+            "target_sensitivity_uT_per_uN": args.target_sensitivity_uT_per_uN,
+            "target_dB_uT": target_signal_uT,
+            "required_Br_for_target_norm_T": required_Br_norm,
+            "required_Br_ratio_norm": (
+                required_Br_norm / float(result["Br_magnetic_T"])
+                if required_Br_norm is not None and abs(float(result["Br_magnetic_T"])) > 1e-30 else None
+            ),
+        }
+    )
+    result["under_cilium_sensor_case_ok"] = is_under_cilium_sensor_case(result)
     outdir = args.outdir if args.outdir is not None else args.restart_dir
     os.makedirs(outdir, exist_ok=True)
     summary_path = args.local_summary_path or os.path.join(outdir, "magnetic_summary.csv")
@@ -362,7 +388,8 @@ def magnetic_fem_summary_columns() -> List[str]:
     return [
         "Br_magnetic_T",
         "magnetic_boundary",
-        "sensor_average", "sensor_average_radius_m", "sensor_average_n", "sensor_average_points_used",
+        "sensor_average", "sensor_average_radius_m", "sensor_average_n",
+        "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
         "sensor_x_m", "sensor_y_m", "sensor_z_m", "sensor_x_over_R", "sensor_y_over_R", "sensor_z_over_R",
         "sensor_position_case", "projection_mode",
         "air_radius_factor", "air_below_factor", "air_above_factor",
@@ -384,6 +411,8 @@ def magnetic_fem_summary_columns() -> List[str]:
         "abs_dB_sensor_x_uT", "abs_dB_sensor_y_uT", "abs_dB_sensor_z_uT", "dominant_component",
         "dBx_per_Br_uT_per_T", "dBy_per_Br_uT_per_T", "dBz_per_Br_uT_per_T", "norm_dB_per_Br_uT_per_T",
         "reaction_force_x_uN",
+        "target_sensitivity_uT_per_uN", "target_dB_uT",
+        "required_Br_for_target_norm_T", "required_Br_ratio_norm", "under_cilium_sensor_case_ok",
         "sensitivity_x_uT_per_uN", "sensitivity_y_uT_per_uN", "sensitivity_z_uT_per_uN", "sensitivity_norm_uT_per_uN",
     ]
 
@@ -560,6 +589,7 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         sensor_average=bool(params.get("sensor_average", False)),
         sensor_average_radius=float(params.get("sensor_average_radius", 25e-6)),
         sensor_average_n=int(params.get("sensor_average_n", 5)),
+        target_sensitivity_uT_per_uN=float(params.get("target_sensitivity_uT_per_uN", 0.63)),
         projection_mode=str(params.get("projection_mode", "cell_center")),
         max_air_cells=int(params.get("max_air_cells", 700000)),
         allow_large_air_mesh=bool(params.get("allow_large_air_mesh", False)),
@@ -749,6 +779,19 @@ def required_Br_for_target(current_Br: float, signal_uT: float, target_signal_uT
     return current_Br * target_signal_uT / abs(signal_uT)
 
 
+def is_under_cilium_sensor_case(result: Dict[str, Any]) -> bool:
+    """Check the fixed under-cilium Hall geometry used for experiment comparison."""
+    try:
+        return (
+            abs(float(result.get("sensor_x_m", 1.0))) <= UNDER_CILIUM_SENSOR_TOL_M
+            and abs(float(result.get("sensor_y_m", 1.0))) <= UNDER_CILIUM_SENSOR_TOL_M
+            and abs(float(result.get("sensor_z_m", 0.0)) - UNDER_CILIUM_SENSOR_Z_M) <= UNDER_CILIUM_SENSOR_TOL_M
+            and bool(result.get("sensor_average", False))
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 def add_magnetic_only_aliases(
     result: Dict[str, Any],
     sensor_gap: float,
@@ -763,6 +806,9 @@ def add_magnetic_only_aliases(
     target_signal_uT = target_sensitivity_uT_per_uN * reaction_uN
     abs_dBx_uT = abs(float(result["dB_sensor_x_uT"]))
     abs_dBz_uT = abs(float(result["dB_sensor_z_uT"]))
+    required_Br_norm = required_Br_for_target(
+        float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
+    )
     result.update(
         {
             "B_before_x_T": result["B0_sensor_x_T"],
@@ -798,18 +844,22 @@ def add_magnetic_only_aliases(
             "dominant_component": "x" if abs_dBx_uT >= abs_dBz_uT else "z",
             "sensor_y_over_R": sensor_y_over_R,
             "target_sensitivity_uT_per_uN": target_sensitivity_uT_per_uN,
+            "target_dB_uT": target_signal_uT,
             "required_Br_for_target_x_T": required_Br_for_target(
                 float(result["Br_magnetic_T"]), float(result["dB_sensor_x_uT"]), target_signal_uT
             ),
             "required_Br_for_target_z_T": required_Br_for_target(
                 float(result["Br_magnetic_T"]), float(result["dB_sensor_z_uT"]), target_signal_uT
             ),
-            "required_Br_for_target_norm_T": required_Br_for_target(
-                float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
+            "required_Br_for_target_norm_T": required_Br_norm,
+            "required_Br_ratio_norm": (
+                required_Br_norm / float(result["Br_magnetic_T"])
+                if required_Br_norm is not None and abs(float(result["Br_magnetic_T"])) > 1e-30 else None
             ),
             "is_valid": is_stable_magnetic_result(result, sensor_gap),
         }
     )
+    result["under_cilium_sensor_case_ok"] = is_under_cilium_sensor_case(result) and bool(result["is_valid"])
     return result
 
 

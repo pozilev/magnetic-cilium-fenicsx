@@ -15,7 +15,7 @@ from dolfinx.fem import petsc as fem_petsc
 from magnetics_dipoles import compute_cell_deformation_gradient_P1, rotation_from_deformation_gradient
 from mechanics_model import create_dolfinx_mesh_3d
 from params import ModelParams
-from sensor_sampling import make_sensor_sample_points
+from sensor_sampling import make_sensor_sample_points, sensor_average_requested_points, sensor_effective_area
 
 
 log = logging.getLogger("magnetic_cilium_3d")
@@ -409,6 +409,13 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
 
     dB = B1 - B0
     reaction_uN = float(mechanics_result.get("reaction_force_x_uN", 0.0) or 0.0)
+    dB_norm_uT = float(np.linalg.norm(dB)) * 1e6
+    target_sensitivity = float(getattr(args, "target_sensitivity_uT_per_uN", 0.63))
+    target_dB_uT = target_sensitivity * reaction_uN
+    required_Br_norm = (
+        params.Br_magnetic * target_dB_uT / dB_norm_uT
+        if abs(dB_norm_uT) > 1e-30 else ""
+    )
     reference_volume = float(mechanics_result.get("volume_upper_m3", 0.0) or 0.0)
     if reference_volume <= 0.0:
         reference_volume = float(np.pi * params.R**2 * params.L2)
@@ -435,7 +442,13 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "sensor_average": bool(args.sensor_average),
         "sensor_average_radius_m": float(args.sensor_average_radius),
         "sensor_average_n": int(args.sensor_average_n),
+        "sensor_average_points_requested": sensor_average_requested_points(
+            bool(args.sensor_average), int(args.sensor_average_n)
+        ),
         "sensor_average_points_used": int(sensor_points.shape[0]),
+        "sensor_area_effective_m2": sensor_effective_area(
+            bool(args.sensor_average), float(args.sensor_average_radius)
+        ),
         "sensor_x_m": params.sensor_x,
         "sensor_y_m": params.sensor_y,
         "sensor_z_m": params.sensor_z,
@@ -488,7 +501,7 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "dB_sensor_x_uT": dB[0] * 1e6,
         "dB_sensor_y_uT": dB[1] * 1e6,
         "dB_sensor_z_uT": dB[2] * 1e6,
-        "dB_sensor_norm_uT": float(np.linalg.norm(dB)) * 1e6,
+        "dB_sensor_norm_uT": dB_norm_uT,
         "abs_dB_sensor_x_uT": abs(dB[0] * 1e6),
         "abs_dB_sensor_y_uT": abs(dB[1] * 1e6),
         "abs_dB_sensor_z_uT": abs(dB[2] * 1e6),
@@ -499,6 +512,20 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
         "dBz_per_Br_uT_per_T": (dB[2] * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
         "norm_dB_per_Br_uT_per_T": (float(np.linalg.norm(dB)) * 1e6 / params.Br_magnetic) if abs(params.Br_magnetic) > 1e-30 else "",
         "reaction_force_x_uN": reaction_uN,
+        "target_sensitivity_uT_per_uN": target_sensitivity,
+        "target_dB_uT": target_dB_uT,
+        "required_Br_for_target_norm_T": required_Br_norm,
+        "required_Br_ratio_norm": (
+            required_Br_norm / params.Br_magnetic
+            if required_Br_norm != "" and abs(params.Br_magnetic) > 1e-30 else ""
+        ),
+        "under_cilium_sensor_case_ok": (
+            abs(params.sensor_x) <= 1.0e-12
+            and abs(params.sensor_y) <= 1.0e-12
+            and abs(params.sensor_z + 1.0e-3) <= 1.0e-12
+            and bool(args.sensor_average)
+            and bool(source_projection_ok)
+        ),
         "sensitivity_x_uT_per_uN": (dB[0] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
         "sensitivity_y_uT_per_uN": (dB[1] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",
         "sensitivity_z_uT_per_uN": (dB[2] * 1e6 / reaction_uN) if reaction_uN > 0.0 else "",

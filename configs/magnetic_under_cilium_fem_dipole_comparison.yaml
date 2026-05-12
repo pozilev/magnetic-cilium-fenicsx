@@ -1,0 +1,42 @@
+# Single FEM comparison case for the same under-cilium sensor geometry used by
+# the dipole comparison config.
+
+global:
+  mode: magnetics-fem
+  master_mode: fem_dipole_comparison
+  results_write_mode: experiment
+  experiment_id: under_cilium_fem_dipole_comparison_v1
+  master_csv_path: results/magnetic_results_master.csv
+  restart_dir: ../magnetic_cilium_3d_results_final/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+  output_dir: ../magnetic_fem_under_cilium_comparison_results
+  validation_summary_csv: magnetic_under_cilium_fem_comparison_summary.csv
+  magnetic_boundary: natural
+  sensor_average: true
+  sensor_average_radius: 50.0e-6
+  sensor_average_n: 13
+  target_sensitivity_uT_per_uN: 0.63
+  h_air: 75.0e-6
+  h_air_near: 75.0e-6
+  h_air_far: 225.0e-6
+  near_radius_factor: 3.0
+  near_source_padding_factor: 2.0
+  near_sensor_padding_factor: 1.0
+  air_radius_factor: 12.0
+  # R = 60 um, so 20R = 1.2 mm keeps the z_s = -1 mm Hall plane inside the air box.
+  air_below_factor: 20.0
+  air_above_factor: 4.0
+  projection_mode: cell_center
+  max_air_cells: 700000
+
+fixed_physical_parameters:
+  Br: 0.20
+  sensor_x: 0.0
+  sensor_y: 0.0
+  sensor_z: -1.0e-3
+  rotate_magnetization: true
+
+sweep:
+  under_cilium_reference:
+    cases:
+      - id: fem_Br_0p20_rs_50um
+        description: "FEM under-cilium reference: Br=0.20 T, z=-1 mm, rs=50 um"
