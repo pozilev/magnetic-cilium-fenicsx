@@ -22,6 +22,9 @@ tables = [
   "pandas",
   "pyarrow",
 ]
+visualization = [
+  "matplotlib",
+]
 
 [project.scripts]
 cilium = "magnetic_cilium.cli.main:main"
