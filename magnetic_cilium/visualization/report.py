@@ -22,9 +22,12 @@ FORCE_PASS_TOLERANCE_PERCENT = 2.0
 
 FIGURE_FILENAMES = {
     "mechanics_card": "mechanics_summary_card",
-    "deformed": "deformed_shape",
-    "von_mises": "von_mises",
-    "jacobian": "jacobian_J",
+    "deformed_overview": "deformed_shape_overview",
+    "deformed_closeup": "deformed_shape_closeup",
+    "von_mises_overview": "von_mises_overview",
+    "von_mises_base_zoom": "von_mises_base_zoom",
+    "jacobian_overview": "jacobian_J_overview",
+    "jacobian_base_zoom": "jacobian_J_base_zoom",
     "panel": "mechanics_panel",
     "delta_b": "deltaB_components",
 }
@@ -39,16 +42,18 @@ RU = {
     "field_component_axis": "Компонента поля",
     "delta_b_axis": "Изменение магнитного поля, мкТл",
     "dominant_component": "Наиболее информативная компонента",
-    "deformed_title": "Деформированная форма",
+    "deformed_title": "Деформированная форма реснички",
     "von_mises_title": "Эквивалентное напряжение von Mises",
     "jacobian_title": "Якобиан деформации J",
     "mechanics_panel_title": "Механическая корректность расчёта",
     "x_axis": "x, мм",
     "y_axis": "y, мм",
     "z_axis": "z, мм",
-    "ux_colorbar": "Перемещение ux, мкм",
+    "ux_colorbar": "Перемещение по x, мкм",
     "vm_colorbar": "Напряжение von Mises, кПа",
-    "j_colorbar": "J = det(F)",
+    "j_colorbar": "J − 1, ×10⁻³",
+    "lower_layer": "нижний PDMS-сегмент",
+    "upper_layer": "верхний магнитный композит",
 }
 
 FIELD_ALIASES = {
@@ -68,6 +73,10 @@ FIELD_ALIASES = {
     "sensor_y_m": ("sensor_y_m", "sensor_y"),
     "sensor_z_m": ("sensor_z_m", "sensor_z"),
     "Br_T": ("Br_magnetic_T", "Br_T", "Br"),
+    "D_m": ("D", "diameter_m"),
+    "R_m": ("R", "radius_m"),
+    "L1_m": ("L1", "lower_length_m", "L1_m"),
+    "L2_m": ("L2", "magnetic_length_m", "L2_m"),
 }
 
 DELTA_B_ALIASES = {
@@ -210,7 +219,13 @@ def discover_result_files(result_dir: Path) -> ResultFiles:
         vtu_candidates.extend(mechanics_json.parent.glob("*.vtu"))
     vtu_candidates.extend(result_dir.rglob("*.vtu"))
 
-    log_files = tuple(sorted(_unique_paths(list(result_dir.glob("*.log")) + list(result_dir.rglob("*.log")))))
+    log_files = tuple(
+        sorted(
+            path
+            for path in _unique_paths(list(result_dir.glob("*.log")) + list(result_dir.rglob("*.log")))
+            if "visual_report" not in {part.lower() for part in path.parts}
+        )
+    )
     files = ResultFiles(
         result_dir=result_dir,
         mechanics_json=mechanics_json,
@@ -480,6 +495,11 @@ def plot_mechanics_3d(
     diagnostics: list[str] = []
     missing: dict[str, list[str]] = {}
     try:
+        import pyvista  # noqa: F401  # type: ignore
+    except ModuleNotFoundError:
+        diagnostics.append("PyVista недоступна; использован fallback-режим рендеринга matplotlib.")
+
+    try:
         np = _require_numpy()
         plt = _require_matplotlib()
         from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # type: ignore
@@ -507,54 +527,53 @@ def plot_mechanics_3d(
     points_m = mesh["points"]
     cells = mesh["cells"]
     u_vertices_m = mesh["u_vertices"]
+    material_cell_ids = mesh.get("material_cell_ids")
+    if material_cell_ids is None or len(material_cell_ids) != len(cells):
+        material_cell_ids = _infer_material_cell_ids(points_m, cells, mechanics, np)
+
     faces, owner_cells = _boundary_faces(cells, np)
     if faces.size == 0:
         diagnostics.append("3D-визуализация пропущена: не удалось выделить внешнюю поверхность сетки.")
         return [], missing, diagnostics
 
     figures: list[FigureRecord] = []
+    face_material = np.asarray(material_cell_ids, dtype=int)[owner_cells]
+    cilium_face_mask = face_material > 0
+    substrate_face_mask = face_material <= 0
+    lower_face_mask = face_material == 1
+    upper_face_mask = face_material == 2
     displacement_face_uT = np.mean(u_vertices_m[faces, 0], axis=1) * 1.0e6
     reaction_uN = reaction_force_uN(mechanics)
     delta_mm = unit_value(mechanics, "delta_x_m", 1.0e3)
     deformed_points_mm = (points_m + u_vertices_m) * 1.0e3
     initial_points_mm = points_m * 1.0e3
-    subtitle_parts = []
-    if delta_mm is not None:
-        subtitle_parts.append(f"смещение = {delta_mm:.3f} мм")
-    if reaction_uN is not None:
-        subtitle_parts.append(f"реакция = {reaction_uN:.2f} мкН")
-    subtitle = ", ".join(subtitle_parts)
+    render_context = {
+        "plt": plt,
+        "poly_collection": Poly3DCollection,
+        "np": np,
+        "points_m": points_m,
+        "cells": cells,
+        "initial_points_mm": initial_points_mm,
+        "deformed_points_mm": deformed_points_mm,
+        "faces": faces,
+        "owner_cells": owner_cells,
+        "cell_material": np.asarray(material_cell_ids, dtype=int),
+        "face_material": face_material,
+        "cilium_face_mask": cilium_face_mask,
+        "substrate_face_mask": substrate_face_mask,
+        "lower_face_mask": lower_face_mask,
+        "upper_face_mask": upper_face_mask,
+        "displacement_face_uT": displacement_face_uT,
+        "mechanics": mechanics,
+        "delta_mm": delta_mm,
+        "reaction_uN": reaction_uN,
+    }
 
-    fig = plt.figure(figsize=(8.2, 7.0))
-    ax = fig.add_subplot(111, projection="3d")
-    _plot_surface(
-        ax,
-        Poly3DCollection,
-        initial_points_mm,
-        faces,
-        face_values=None,
-        cmap=None,
-        alpha=0.14,
-        color="#9aa6b2",
-        edgecolor="#8b96a3",
-        linewidth=0.04,
-    )
-    mappable = _plot_surface(
-        ax,
-        Poly3DCollection,
-        deformed_points_mm,
-        faces,
-        face_values=displacement_face_uT,
-        cmap="viridis",
-        alpha=0.95,
-        edgecolor="none",
-        linewidth=0.0,
-    )
-    _format_3d_axis(ax, RU["deformed_title"], subtitle)
-    cbar = fig.colorbar(mappable, ax=ax, shrink=0.72, pad=0.03)
-    cbar.set_label(RU["ux_colorbar"])
-    figures.append(save_figure(fig, outdir, FIGURE_FILENAMES["deformed"], RU["deformed_title"], "deformed"))
+    for view_name, key in (("overview", "deformed_overview"), ("closeup", "deformed_closeup")):
+        figures.append(_plot_deformed_view(render_context, outdir, view_name, key))
 
+    vm_kpa = None
+    jac = None
     if vtu_path is not None:
         vm = _load_vtu_cell_field(vtu_path, VTK_FIELD_ALIASES["von_mises"], np)
         if vm is None:
@@ -564,26 +583,19 @@ def plot_mechanics_3d(
             vm_kpa = np.asarray(vm, dtype=float) * 1.0e-3
             vm_face = vm_kpa[owner_cells]
             vmax_real = float(np.nanmax(vm_kpa))
-            vmin, vmax = _percentile_limits(vm_face, np, 2.0, 98.0)
-            fig = plt.figure(figsize=(8.2, 7.0))
-            ax = fig.add_subplot(111, projection="3d")
-            mappable = _plot_surface(
-                ax,
-                Poly3DCollection,
-                deformed_points_mm,
-                faces,
-                face_values=vm_face,
-                cmap="magma",
-                alpha=0.96,
-                edgecolor="none",
-                linewidth=0.0,
-                vmin=vmin,
-                vmax=vmax,
-            )
-            _format_3d_axis(ax, RU["von_mises_title"], f"реальный максимум = {vmax_real:.2f} кПа")
-            cbar = fig.colorbar(mappable, ax=ax, shrink=0.72, pad=0.03)
-            cbar.set_label(RU["vm_colorbar"])
-            figures.append(save_figure(fig, outdir, FIGURE_FILENAMES["von_mises"], RU["von_mises_title"], "von_mises"))
+            field = {
+                "kind": "von_mises",
+                "face_values": vm_face,
+                "cell_values": vm_kpa,
+                "cmap": "magma",
+                "colorbar": RU["vm_colorbar"],
+                "title": RU["von_mises_title"],
+                "subtitle": f"цветовая шкала ограничена по 99-му перцентилю, реальный максимум = {vmax_real:.2f} кПа",
+                "vmin_vmax": _percentile_limits(vm_face[cilium_face_mask], np, 1.0, 99.0),
+                "max_marker": True,
+            }
+            figures.append(_plot_scalar_view(render_context, field, outdir, "overview", "von_mises_overview"))
+            figures.append(_plot_scalar_view(render_context, field, outdir, "base_zoom", "von_mises_base_zoom"))
 
         jac = _load_vtu_cell_field(vtu_path, VTK_FIELD_ALIASES["J"], np)
         if jac is None:
@@ -594,38 +606,24 @@ def plot_mechanics_3d(
             jac_face = jac[owner_cells]
             j_min = float(np.nanmin(jac))
             j_max = float(np.nanmax(jac))
-            dev = max(abs(j_min - 1.0), abs(j_max - 1.0), 1.0e-6)
-            fig = plt.figure(figsize=(8.2, 7.0))
-            ax = fig.add_subplot(111, projection="3d")
-            mappable = _plot_surface(
-                ax,
-                Poly3DCollection,
-                deformed_points_mm,
-                faces,
-                face_values=jac_face,
-                cmap="coolwarm",
-                alpha=0.96,
-                edgecolor="none",
-                linewidth=0.0,
-                vmin=1.0 - dev,
-                vmax=1.0 + dev,
-            )
-            _format_3d_axis(ax, RU["jacobian_title"], f"диапазон J = [{j_min:.6f}; {j_max:.6f}]")
-            cbar = fig.colorbar(mappable, ax=ax, shrink=0.72, pad=0.03)
-            cbar.set_label(RU["j_colorbar"])
-            figures.append(save_figure(fig, outdir, FIGURE_FILENAMES["jacobian"], RU["jacobian_title"], "jacobian"))
+            j_deviation = (jac_face - 1.0) * 1.0e3
+            j_dev_abs = max(abs(float(np.nanmin(j_deviation[cilium_face_mask]))), abs(float(np.nanmax(j_deviation[cilium_face_mask]))), 1.0e-6)
+            field = {
+                "kind": "jacobian",
+                "face_values": j_deviation,
+                "cell_values": jac,
+                "cmap": "coolwarm",
+                "colorbar": RU["j_colorbar"],
+                "title": RU["jacobian_title"],
+                "subtitle": f"J ∈ [{j_min:.6f}; {j_max:.6f}]",
+                "vmin_vmax": (-j_dev_abs, j_dev_abs),
+                "center": 0.0,
+                "max_marker": False,
+            }
+            figures.append(_plot_scalar_view(render_context, field, outdir, "overview", "jacobian_overview"))
+            figures.append(_plot_scalar_view(render_context, field, outdir, "base_zoom", "jacobian_base_zoom"))
 
-    panel = _try_plot_mechanics_panel(
-        plt=plt,
-        poly_collection=Poly3DCollection,
-        points_mm=deformed_points_mm,
-        faces=faces,
-        displacement_face=displacement_face_uT,
-        owner_cells=owner_cells,
-        vtu_path=vtu_path,
-        outdir=outdir,
-        np=np,
-    )
+    panel = _try_plot_mechanics_panel(render_context, outdir, vm_kpa=vm_kpa, jac=jac)
     if panel is not None:
         figures.append(panel)
     return figures, missing, diagnostics
@@ -736,7 +734,18 @@ def write_markdown_report(result: VisualReportResult) -> Path:
             lines.append(f"- Положение датчика Холла: {sensor}")
 
     lines.extend(["", "## Рисунки", ""])
-    for key in ("mechanics_card", "deformed", "von_mises", "jacobian", "panel", "delta_b"):
+    figure_order = (
+        "mechanics_card",
+        "deformed_overview",
+        "deformed_closeup",
+        "von_mises_overview",
+        "von_mises_base_zoom",
+        "jacobian_overview",
+        "jacobian_base_zoom",
+        "panel",
+        "delta_b",
+    )
+    for key in figure_order:
         figure = figures_by_key.get(key)
         if figure is None:
             continue
@@ -858,12 +867,24 @@ def automatic_conclusions(result: VisualReportResult) -> list[str]:
     return conclusions
 
 
-def save_figure(fig: Any, outdir: Path, stem: str, title: str, key: str) -> FigureRecord:
+def save_figure(
+    fig: Any,
+    outdir: Path,
+    stem: str,
+    title: str,
+    key: str,
+    *,
+    save_pdf: bool = True,
+    dpi: int = 240,
+    tight: bool = True,
+) -> FigureRecord:
     outdir.mkdir(parents=True, exist_ok=True)
     png_path = outdir / f"{stem}.png"
-    pdf_path = outdir / f"{stem}.pdf"
-    fig.savefig(png_path, dpi=240, bbox_inches="tight", facecolor=fig.get_facecolor())
-    fig.savefig(pdf_path, bbox_inches="tight", facecolor=fig.get_facecolor())
+    pdf_path = outdir / f"{stem}.pdf" if save_pdf else None
+    bbox = "tight" if tight else None
+    fig.savefig(png_path, dpi=dpi, bbox_inches=bbox, facecolor=fig.get_facecolor())
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight", facecolor=fig.get_facecolor())
     _close_figure(fig)
     return FigureRecord(key=key, title=title, png_path=png_path, pdf_path=pdf_path)
 
@@ -934,11 +955,26 @@ def _load_restart_mesh(path: Path, np: Any) -> dict[str, Any]:
     points = np.asarray(data["points"], dtype=float)
     cells = np.asarray(data["cells"], dtype=int)
     u_vertices = np.asarray(data["u_vertices"], dtype=float)
+    material_cell_ids = np.asarray(data["material_cell_ids"], dtype=int) if "material_cell_ids" in data else None
     if cells.ndim != 2 or cells.shape[1] < 4:
         raise ValueError("restart cells must have at least four vertex columns")
     if u_vertices.shape[0] != points.shape[0]:
         raise ValueError("u_vertices length does not match points length")
-    return {"points": points[:, :3], "cells": cells[:, :4], "u_vertices": u_vertices[:, :3]}
+    return {
+        "points": points[:, :3],
+        "cells": cells[:, :4],
+        "u_vertices": u_vertices[:, :3],
+        "material_cell_ids": material_cell_ids,
+    }
+
+
+def _infer_material_cell_ids(points_m: Any, cells: Any, mechanics: Mapping[str, Any], np: Any) -> Any:
+    l1 = _lower_layer_length_m(mechanics)
+    cell_centers = np.mean(points_m[cells[:, :4]], axis=1)
+    material = np.zeros(len(cells), dtype=int)
+    material[cell_centers[:, 2] >= 0.0] = 1
+    material[cell_centers[:, 2] >= l1] = 2
+    return material
 
 
 def _select_vtu_with_fields(vtu_files: Sequence[Path]) -> tuple[Path | None, list[str]]:
@@ -1020,59 +1056,453 @@ def _boundary_faces(cells: Any, np: Any) -> tuple[Any, Any]:
     return faces, owner_cells
 
 
+def _plot_deformed_view(context: Mapping[str, Any], outdir: Path, view_name: str, key: str) -> FigureRecord:
+    plt = context["plt"]
+    fig = plt.figure(figsize=(9.8, 7.4), facecolor="white")
+    ax = fig.add_subplot(111, projection="3d")
+    bounds = _view_bounds(context, view_name)
+    face_mask = _faces_in_bounds(context["deformed_points_mm"], context["faces"], bounds, context["np"])
+    cilium_mask = face_mask & context["cilium_face_mask"]
+    substrate_mask = face_mask & context["substrate_face_mask"]
+
+    _plot_surface(
+        ax,
+        context,
+        context["initial_points_mm"],
+        face_mask,
+        color="#aeb7c2",
+        alpha=0.17,
+        linewidth=0.0,
+    )
+    _plot_surface(
+        ax,
+        context,
+        context["deformed_points_mm"],
+        substrate_mask,
+        color="#d4d8dd",
+        alpha=0.28,
+        linewidth=0.0,
+    )
+    mappable = _plot_surface(
+        ax,
+        context,
+        context["deformed_points_mm"],
+        cilium_mask,
+        face_values=context["displacement_face_uT"][cilium_mask],
+        cmap="viridis",
+        alpha=0.98,
+        linewidth=0.0,
+    )
+    _add_layer_ring_and_labels(ax, context, bounds, closeup=view_name != "overview")
+    _add_displacement_arrow(ax, bounds, context["delta_mm"], context["reaction_uN"])
+    _format_3d_axis(ax, RU["deformed_title"], _delta_force_label(context["delta_mm"], context["reaction_uN"]), bounds, closeup=view_name != "overview")
+    cbar = fig.colorbar(mappable, ax=ax, shrink=0.66, pad=0.02)
+    cbar.set_label(RU["ux_colorbar"], fontsize=10)
+    return save_figure(
+        fig,
+        outdir,
+        FIGURE_FILENAMES[key],
+        f"{RU['deformed_title']} ({_view_label(view_name)})",
+        key,
+        save_pdf=False,
+        dpi=220,
+        tight=False,
+    )
+
+
+def _plot_scalar_view(context: Mapping[str, Any], field: Mapping[str, Any], outdir: Path, view_name: str, key: str) -> FigureRecord:
+    plt = context["plt"]
+    fig = plt.figure(figsize=(9.8, 7.4), facecolor="white")
+    ax = fig.add_subplot(111, projection="3d")
+    bounds = _view_bounds(context, view_name)
+    face_mask = _faces_in_bounds(context["deformed_points_mm"], context["faces"], bounds, context["np"])
+    cilium_mask = face_mask & context["cilium_face_mask"]
+    substrate_mask = face_mask & context["substrate_face_mask"]
+
+    _plot_surface(
+        ax,
+        context,
+        context["deformed_points_mm"],
+        substrate_mask,
+        color="#d3d6db",
+        alpha=0.24 if view_name == "overview" else 0.32,
+        linewidth=0.0,
+    )
+    vmin, vmax = field["vmin_vmax"]
+    if field.get("kind") == "von_mises" and cilium_mask.any():
+        vmin, vmax = _percentile_limits(field["face_values"][cilium_mask], context["np"], 1.0, 99.0)
+    elif field.get("kind") == "jacobian" and cilium_mask.any():
+        local = field["face_values"][cilium_mask]
+        dev = max(abs(float(context["np"].nanmin(local))), abs(float(context["np"].nanmax(local))), 1.0e-6)
+        vmin, vmax = -dev, dev
+    mappable = _plot_surface(
+        ax,
+        context,
+        context["deformed_points_mm"],
+        cilium_mask,
+        face_values=field["face_values"][cilium_mask],
+        cmap=str(field["cmap"]),
+        alpha=0.98,
+        linewidth=0.0,
+        vmin=vmin,
+        vmax=vmax,
+        center=field.get("center"),
+    )
+    _add_layer_ring_and_labels(ax, context, bounds, closeup=view_name != "overview")
+    if field.get("max_marker"):
+        _add_face_maximum_marker(ax, context, field["face_values"], cilium_mask)
+    _format_3d_axis(ax, str(field["title"]), str(field["subtitle"]), bounds, closeup=view_name != "overview")
+    cbar = fig.colorbar(mappable, ax=ax, shrink=0.66, pad=0.02)
+    cbar.set_label(str(field["colorbar"]), fontsize=10)
+    return save_figure(
+        fig,
+        outdir,
+        FIGURE_FILENAMES[key],
+        f"{field['title']} ({_view_label(view_name)})",
+        key,
+        save_pdf=False,
+        dpi=220,
+        tight=False,
+    )
+
+
 def _plot_surface(
     ax: Any,
-    poly_collection: Any,
+    context: Mapping[str, Any],
     points_mm: Any,
-    faces: Any,
+    face_mask: Any,
     *,
-    face_values: Any | None,
-    cmap: str | None,
+    face_values: Any | None = None,
+    cmap: str | None = None,
     alpha: float,
     color: str | None = None,
-    edgecolor: str | None = None,
     linewidth: float = 0.0,
     vmin: float | None = None,
     vmax: float | None = None,
+    center: float | None = None,
 ) -> Any:
+    np = context["np"]
+    faces = context["faces"][face_mask]
+    if len(faces) == 0:
+        return _empty_scalar_mappable(cmap or "viridis", vmin, vmax, center)
     vertices = points_mm[faces]
-    collection = poly_collection(vertices, linewidths=linewidth, alpha=alpha)
-    if face_values is None:
-        collection.set_facecolor(color or "#9aa6b2")
-    else:
-        collection.set_array(face_values)
-        collection.set_cmap(cmap)
-        if vmin is not None or vmax is not None:
-            collection.set_clim(vmin, vmax)
-    if edgecolor is not None:
-        collection.set_edgecolor(edgecolor)
+    facecolors, mappable = _surface_facecolors(vertices, face_values, cmap, color, alpha, vmin, vmax, center, np)
+    collection = context["poly_collection"](
+        vertices,
+        facecolors=facecolors,
+        edgecolors="none",
+        linewidths=linewidth,
+        antialiaseds=True,
+        zsort="average",
+    )
     ax.add_collection3d(collection)
-    _set_3d_limits(ax, points_mm)
-    return collection
+    return mappable
 
 
-def _format_3d_axis(ax: Any, title: str, subtitle: str = "") -> None:
-    ax.set_title(title if not subtitle else f"{title}\n{subtitle}", fontsize=14, weight="bold", pad=14)
-    ax.set_xlabel(RU["x_axis"])
-    ax.set_ylabel(RU["y_axis"])
-    ax.set_zlabel(RU["z_axis"])
-    ax.view_init(elev=22, azim=-58)
-    ax.grid(False)
-    ax.xaxis.pane.set_facecolor((0.96, 0.97, 0.98, 1.0))
-    ax.yaxis.pane.set_facecolor((0.96, 0.97, 0.98, 1.0))
-    ax.zaxis.pane.set_facecolor((0.96, 0.97, 0.98, 1.0))
+def _surface_facecolors(
+    vertices: Any,
+    face_values: Any | None,
+    cmap: str | None,
+    color: str | None,
+    alpha: float,
+    vmin: float | None,
+    vmax: float | None,
+    center: float | None,
+    np: Any,
+) -> tuple[Any, Any]:
+    from matplotlib import cm, colors  # type: ignore
+
+    normals = _face_normals(vertices, np)
+    light_dir = np.asarray([0.35, -0.48, 0.80], dtype=float)
+    light_dir = light_dir / np.linalg.norm(light_dir)
+    diffuse = np.clip(np.abs(normals @ light_dir), 0.0, 1.0)
+    specular = np.clip(normals @ light_dir, 0.0, 1.0) ** 18
+    intensity = np.clip(0.58 + 0.36 * diffuse + 0.12 * specular, 0.0, 1.18)
+
+    if face_values is None:
+        base_rgb = np.asarray(colors.to_rgb(color or "#c7ced6"), dtype=float)
+        rgba = np.tile(np.r_[base_rgb, alpha], (len(vertices), 1))
+        mappable = _empty_scalar_mappable(cmap or "viridis", vmin, vmax, center)
+    else:
+        norm = _color_norm(face_values, vmin, vmax, center)
+        cmap_obj = cm.get_cmap(cmap or "viridis")
+        rgba = cmap_obj(norm(face_values))
+        rgba[:, 3] = alpha
+        mappable = cm.ScalarMappable(norm=norm, cmap=cmap_obj)
+        mappable.set_array(face_values)
+
+    rgba[:, :3] = np.clip(rgba[:, :3] * intensity[:, None] + 0.035 * specular[:, None], 0.0, 1.0)
+    return rgba, mappable
 
 
-def _set_3d_limits(ax: Any, points_mm: Any) -> None:
-    mins = points_mm.min(axis=0)
-    maxs = points_mm.max(axis=0)
-    centers = (mins + maxs) / 2.0
-    radius = max(maxs - mins) / 2.0
-    if radius <= 0:
-        radius = 1.0
-    ax.set_xlim(centers[0] - radius, centers[0] + radius)
-    ax.set_ylim(centers[1] - radius, centers[1] + radius)
-    ax.set_zlim(centers[2] - radius, centers[2] + radius)
+def _empty_scalar_mappable(cmap: str, vmin: float | None, vmax: float | None, center: float | None) -> Any:
+    from matplotlib import cm  # type: ignore
+
+    norm = _color_norm([0.0, 1.0], vmin, vmax, center)
+    return cm.ScalarMappable(norm=norm, cmap=cm.get_cmap(cmap))
+
+
+def _color_norm(values: Any, vmin: float | None, vmax: float | None, center: float | None) -> Any:
+    from matplotlib import colors  # type: ignore
+
+    if vmin is None:
+        vmin = float(min(values))
+    if vmax is None:
+        vmax = float(max(values))
+    if abs(float(vmax) - float(vmin)) < 1.0e-15:
+        vmax = float(vmin) + 1.0
+    if center is not None and vmin < center < vmax:
+        return colors.TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
+    return colors.Normalize(vmin=vmin, vmax=vmax)
+
+
+def _face_normals(vertices: Any, np: Any) -> Any:
+    normals = np.cross(vertices[:, 1] - vertices[:, 0], vertices[:, 2] - vertices[:, 0])
+    lengths = np.linalg.norm(normals, axis=1)
+    lengths[lengths == 0.0] = 1.0
+    return normals / lengths[:, None]
+
+
+def _format_3d_axis(ax: Any, title: str, subtitle: str, bounds: tuple[float, float, float, float, float, float], *, closeup: bool) -> None:
+    ax.set_title(title if not subtitle else f"{title}\n{subtitle}", fontsize=10.6, weight="bold", pad=8)
+    ax.set_xlabel(RU["x_axis"], fontsize=9.5, labelpad=4)
+    ax.set_ylabel(RU["y_axis"], fontsize=9.5, labelpad=4)
+    ax.set_zlabel(RU["z_axis"], fontsize=9.5, labelpad=4)
+    ax.tick_params(labelsize=8.5, pad=1)
+    ax.view_init(elev=18 if closeup else 20, azim=-70)
+    ax.grid(not closeup)
+    _set_axis_bounds(ax, bounds, compress_z=closeup)
+    pane_alpha = 0.0 if closeup else 0.06
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.pane.set_facecolor((0.96, 0.97, 0.98, pane_alpha))
+        axis.pane.set_edgecolor((0.82, 0.86, 0.90, 0.28 if not closeup else 0.0))
+
+
+def _set_axis_bounds(ax: Any, bounds: tuple[float, float, float, float, float, float], *, compress_z: bool) -> None:
+    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.set_zlim(zmin, zmax)
+    xspan = max(xmax - xmin, 1.0e-6)
+    yspan = max(ymax - ymin, 1.0e-6)
+    zspan = max(zmax - zmin, 1.0e-6)
+    lateral = max(xspan, yspan)
+    aspect_z = min(zspan, 2.8 * lateral) if compress_z else min(zspan, 3.6 * lateral)
+    try:
+        ax.set_box_aspect((xspan, yspan, aspect_z))
+    except Exception:
+        pass
+
+
+def _view_bounds(context: Mapping[str, Any], view_name: str) -> tuple[float, float, float, float, float, float]:
+    np = context["np"]
+    deformed = context["deformed_points_mm"]
+    initial = context["initial_points_mm"]
+    faces = context["faces"]
+    cilium_faces = faces[context["cilium_face_mask"]]
+    substrate_faces = faces[context["substrate_face_mask"]]
+
+    if view_name == "overview" or cilium_faces.size == 0:
+        points = np.vstack([initial, deformed])
+        mins = points.min(axis=0)
+        maxs = points.max(axis=0)
+        margins = np.maximum((maxs - mins) * np.asarray([0.08, 0.08, 0.035]), np.asarray([0.06, 0.06, 0.05]))
+        return (
+            float(mins[0] - margins[0]),
+            float(maxs[0] + margins[0]),
+            float(mins[1] - margins[1]),
+            float(maxs[1] + margins[1]),
+            float(mins[2] - margins[2]),
+            float(maxs[2] + margins[2]),
+        )
+
+    cilium_points = deformed[np.unique(cilium_faces.reshape(-1))]
+    cmins = cilium_points.min(axis=0)
+    cmaxs = cilium_points.max(axis=0)
+    radius_mm = _cilium_radius_m(context["mechanics"]) * 1.0e3
+    substrate_margin = max(4.2 * radius_mm, 0.24)
+    x_margin = max(2.6 * radius_mm, 0.16)
+    y_margin = max(2.6 * radius_mm, 0.16)
+
+    if view_name == "base_zoom":
+        l1_mm = _lower_layer_length_m(context["mechanics"]) * 1.0e3
+        zmax = min(float(cmaxs[2] + 0.04), max(0.85, 0.55 * l1_mm))
+        zmin = min(-0.18, float(cmins[2] - 0.04))
+        xcenter = float(np.mean(cilium_points[cilium_points[:, 2] <= max(0.25, zmax), 0])) if cilium_points.size else 0.0
+        ycenter = float(np.mean(cilium_points[:, 1])) if cilium_points.size else 0.0
+        return (
+            xcenter - substrate_margin,
+            xcenter + substrate_margin,
+            ycenter - substrate_margin,
+            ycenter + substrate_margin,
+            zmin,
+            zmax,
+        )
+
+    if substrate_faces.size:
+        substrate_points = deformed[np.unique(substrate_faces.reshape(-1))]
+        top_context = substrate_points[substrate_points[:, 2] > -0.22]
+        if top_context.size:
+            context_x = top_context[:, 0]
+            context_y = top_context[:, 1]
+            xmin = min(float(cmins[0] - x_margin), float(np.percentile(context_x, 12)))
+            xmax = max(float(cmaxs[0] + x_margin), float(np.percentile(context_x, 88)))
+            ymin = min(float(cmins[1] - y_margin), float(np.percentile(context_y, 12)))
+            ymax = max(float(cmaxs[1] + y_margin), float(np.percentile(context_y, 88)))
+        else:
+            xmin, xmax = float(cmins[0] - x_margin), float(cmaxs[0] + x_margin)
+            ymin, ymax = float(cmins[1] - y_margin), float(cmaxs[1] + y_margin)
+    else:
+        xmin, xmax = float(cmins[0] - x_margin), float(cmaxs[0] + x_margin)
+        ymin, ymax = float(cmins[1] - y_margin), float(cmaxs[1] + y_margin)
+
+    return (xmin, xmax, ymin, ymax, min(-0.16, float(cmins[2] - 0.04)), float(cmaxs[2] + 0.08))
+
+
+def _faces_in_bounds(points_mm: Any, faces: Any, bounds: tuple[float, float, float, float, float, float], np: Any) -> Any:
+    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    centers = np.mean(points_mm[faces], axis=1)
+    return (
+        (centers[:, 0] >= xmin)
+        & (centers[:, 0] <= xmax)
+        & (centers[:, 1] >= ymin)
+        & (centers[:, 1] <= ymax)
+        & (centers[:, 2] >= zmin)
+        & (centers[:, 2] <= zmax)
+    )
+
+
+def _add_displacement_arrow(ax: Any, bounds: tuple[float, float, float, float, float, float], delta_mm: float | None, reaction_uN: float | None) -> None:
+    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    xspan = xmax - xmin
+    yspan = ymax - ymin
+    zspan = zmax - zmin
+    length = min(max(abs(delta_mm or 0.0) * 0.45, 0.16 * xspan), 0.42 * xspan)
+    x0 = xmin + 0.10 * xspan
+    y0 = ymax - 0.13 * yspan
+    z0 = zmax - 0.10 * zspan
+    ax.quiver(x0, y0, z0, length, 0.0, 0.0, color="#1f5f99", linewidth=2.2, arrow_length_ratio=0.24)
+    ax.text2D(0.58, 0.80, "направление δx", transform=ax.transAxes, color="#1f5f99", fontsize=8.8)
+
+
+def _delta_force_label(delta_mm: float | None, reaction_uN: float | None) -> str:
+    parts = []
+    if delta_mm is not None:
+        parts.append(f"δx = {delta_mm:.3f} мм")
+    if reaction_uN is not None:
+        parts.append(f"Fx = {reaction_uN:.2f} мкН")
+    return ", ".join(parts)
+
+
+def _add_layer_ring_and_labels(
+    ax: Any,
+    context: Mapping[str, Any],
+    bounds: tuple[float, float, float, float, float, float],
+    *,
+    closeup: bool,
+    labels: bool = True,
+) -> None:
+    np = context["np"]
+    l1_m = _lower_layer_length_m(context["mechanics"])
+    l1_mm = l1_m * 1.0e3
+    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    if not (zmin <= l1_mm <= zmax):
+        return
+
+    points_m = context["points_m"]
+    deformed_mm = context["deformed_points_mm"]
+    radius = _cilium_radius_m(context["mechanics"])
+    tol = max(0.015e-3, 0.35 * radius)
+    radial = np.linalg.norm(points_m[:, :2], axis=1)
+    idx = np.where((np.abs(points_m[:, 2] - l1_m) <= tol) & (radial <= 1.35 * radius))[0]
+    if len(idx) >= 8:
+        ring = deformed_mm[idx]
+        angles = np.arctan2(ring[:, 1] - np.mean(ring[:, 1]), ring[:, 0] - np.mean(ring[:, 0]))
+        ring = ring[np.argsort(angles)]
+    else:
+        theta = np.linspace(0.0, 2.0 * np.pi, 96)
+        ring_radius_mm = radius * 1.0e3
+        x_shift = (context["delta_mm"] or 0.0) * (l1_m / max(_total_length_m(context["mechanics"]), 1.0e-12))
+        ring = np.column_stack([x_shift + ring_radius_mm * np.cos(theta), ring_radius_mm * np.sin(theta), np.full_like(theta, l1_mm)])
+    ax.plot(ring[:, 0], ring[:, 1], ring[:, 2], color="#1f2933", linewidth=1.4, alpha=0.88)
+
+    if labels and closeup:
+        ax.text2D(
+            0.06,
+            0.30,
+            RU["lower_layer"],
+            transform=ax.transAxes,
+            color="#335c77",
+            fontsize=8.8,
+            bbox={"boxstyle": "round,pad=0.22,rounding_size=0.04", "facecolor": "#eef5fb", "edgecolor": "#b7cadd", "alpha": 0.90},
+        )
+        ax.text2D(
+            0.06,
+            0.58,
+            RU["upper_layer"],
+            transform=ax.transAxes,
+            color="#9a5b1d",
+            fontsize=8.8,
+            bbox={"boxstyle": "round,pad=0.22,rounding_size=0.04", "facecolor": "#fff4e5", "edgecolor": "#e1c39b", "alpha": 0.90},
+        )
+
+
+def _add_face_maximum_marker(ax: Any, context: Mapping[str, Any], face_values: Any, face_mask: Any) -> None:
+    np = context["np"]
+    visible_ids = np.where(face_mask)[0]
+    if visible_ids.size == 0:
+        return
+    values = np.asarray(face_values, dtype=float)[visible_ids]
+    if values.size == 0 or not np.isfinite(values).any():
+        return
+    face_id = int(visible_ids[int(np.nanargmax(values))])
+    point = np.mean(context["deformed_points_mm"][context["faces"][face_id]], axis=0)
+    ax.scatter([point[0]], [point[1]], [point[2]], color="#d62728", s=42, depthshade=True)
+    ax.text(point[0], point[1], point[2], "  максимум", color="#a51d2d", fontsize=8.3)
+
+
+def _add_maximum_marker(ax: Any, context: Mapping[str, Any], cell_values: Any, bounds: tuple[float, float, float, float, float, float]) -> None:
+    np = context["np"]
+    cell_material = context["cell_material"]
+    candidate = np.where(cell_material > 0)[0]
+    if candidate.size == 0:
+        candidate = np.arange(len(cell_values))
+    max_cell = int(candidate[np.nanargmax(np.asarray(cell_values)[candidate])])
+    if max_cell >= len(context["cells"]):
+        return
+    point_ids = context["cells"][max_cell, :4]
+    point = np.mean(context["deformed_points_mm"][point_ids], axis=0)
+    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    if not (xmin <= point[0] <= xmax and ymin <= point[1] <= ymax and zmin <= point[2] <= zmax):
+        return
+    ax.scatter([point[0]], [point[1]], [point[2]], color="#d62728", s=36, depthshade=True)
+    ax.text(point[0], point[1], point[2], "  максимум", color="#a51d2d", fontsize=8.3)
+
+
+def _view_label(view_name: str) -> str:
+    return {
+        "overview": "общий вид",
+        "closeup": "крупный вид",
+        "base_zoom": "zoom основания",
+    }.get(view_name, view_name)
+
+
+def _lower_layer_length_m(mechanics: Mapping[str, Any]) -> float:
+    return numeric_value(mechanics, FIELD_ALIASES["L1_m"]) or 2.0e-3
+
+
+def _total_length_m(mechanics: Mapping[str, Any]) -> float:
+    l1 = _lower_layer_length_m(mechanics)
+    l2 = numeric_value(mechanics, FIELD_ALIASES["L2_m"]) or 2.0e-3
+    return l1 + l2
+
+
+def _cilium_radius_m(mechanics: Mapping[str, Any]) -> float:
+    radius = numeric_value(mechanics, FIELD_ALIASES["R_m"])
+    if radius is not None:
+        return radius
+    diameter = numeric_value(mechanics, FIELD_ALIASES["D_m"])
+    return 0.5 * diameter if diameter is not None else 60.0e-6
 
 
 def _percentile_limits(values: Any, np: Any, low: float, high: float) -> tuple[float, float]:
@@ -1087,52 +1517,57 @@ def _percentile_limits(values: Any, np: Any, low: float, high: float) -> tuple[f
     return float(vmin), float(vmax)
 
 
-def _try_plot_mechanics_panel(
-    *,
-    plt: Any,
-    poly_collection: Any,
-    points_mm: Any,
-    faces: Any,
-    displacement_face: Any,
-    owner_cells: Any,
-    vtu_path: Path | None,
-    outdir: Path,
-    np: Any,
-) -> FigureRecord | None:
-    if vtu_path is None:
+def _try_plot_mechanics_panel(context: Mapping[str, Any], outdir: Path, *, vm_kpa: Any | None, jac: Any | None) -> FigureRecord | None:
+    if vm_kpa is None or jac is None:
         return None
-    vm = _load_vtu_cell_field(vtu_path, VTK_FIELD_ALIASES["von_mises"], np)
-    jac = _load_vtu_cell_field(vtu_path, VTK_FIELD_ALIASES["J"], np)
-    if vm is None or jac is None:
-        return None
-    vm_face = np.asarray(vm, dtype=float)[owner_cells] * 1.0e-3
-    jac_face = np.asarray(jac, dtype=float)[owner_cells]
-    fig = plt.figure(figsize=(15.8, 5.4))
-    fig.suptitle(RU["mechanics_panel_title"], fontsize=17, weight="bold")
+    plt = context["plt"]
+    np = context["np"]
+    owner_cells = context["owner_cells"]
+    vm_face = np.asarray(vm_kpa, dtype=float)[owner_cells]
+    jac_face = (np.asarray(jac, dtype=float)[owner_cells] - 1.0) * 1.0e3
+    cilium_mask = context["cilium_face_mask"]
+    j_dev_abs = max(abs(float(np.nanmin(jac_face[cilium_mask]))), abs(float(np.nanmax(jac_face[cilium_mask]))), 1.0e-6)
+    fig = plt.figure(figsize=(16.8, 6.2), facecolor="white")
+    fig.suptitle(RU["mechanics_panel_title"], fontsize=15.5, weight="bold", y=0.98)
     panel_data = [
-        (RU["deformed_title"], displacement_face, "viridis", RU["ux_colorbar"], None, None),
-        (RU["von_mises_title"], vm_face, "magma", RU["vm_colorbar"], *_percentile_limits(vm_face, np, 2.0, 98.0)),
-        (RU["jacobian_title"], jac_face, "coolwarm", RU["j_colorbar"], 1.0 - max(abs(float(np.nanmin(jac_face)) - 1.0), abs(float(np.nanmax(jac_face)) - 1.0), 1.0e-6), 1.0 + max(abs(float(np.nanmin(jac_face)) - 1.0), abs(float(np.nanmax(jac_face)) - 1.0), 1.0e-6)),
+        ("а", RU["deformed_title"], "overview", context["displacement_face_uT"], "viridis", RU["ux_colorbar"], None, None, None),
+        ("б", "von Mises: zoom основания", "base_zoom", vm_face, "magma", RU["vm_colorbar"], *_percentile_limits(vm_face[cilium_mask], np, 1.0, 99.0), None),
+        ("в", "Отклонение J − 1", "base_zoom", jac_face, "coolwarm", RU["j_colorbar"], -j_dev_abs, j_dev_abs, 0.0),
     ]
-    for index, (title, values, cmap, cbar_label, vmin, vmax) in enumerate(panel_data, start=1):
+    for index, (letter, title, view_name, values, cmap, cbar_label, vmin, vmax, center) in enumerate(panel_data, start=1):
         ax = fig.add_subplot(1, 3, index, projection="3d")
+        bounds = _view_bounds(context, view_name)
+        face_mask = _faces_in_bounds(context["deformed_points_mm"], context["faces"], bounds, np)
+        cilium_faces = face_mask & context["cilium_face_mask"]
+        substrate_faces = face_mask & context["substrate_face_mask"]
+        _plot_surface(
+            ax,
+            context,
+            context["deformed_points_mm"],
+            substrate_faces,
+            color="#d5d8dd",
+            alpha=0.22 if index == 1 else 0.30,
+            linewidth=0.0,
+        )
         mappable = _plot_surface(
             ax,
-            poly_collection,
-            points_mm,
-            faces,
-            face_values=values,
+            context,
+            context["deformed_points_mm"],
+            cilium_faces,
+            face_values=values[cilium_faces],
             cmap=cmap,
             alpha=0.96,
-            edgecolor="none",
             linewidth=0.0,
             vmin=vmin,
             vmax=vmax,
+            center=center,
         )
-        _format_3d_axis(ax, title)
+        _add_layer_ring_and_labels(ax, context, bounds, closeup=True, labels=False)
+        _format_3d_axis(ax, title, "", bounds, closeup=True)
+        ax.text2D(0.02, 0.95, letter, transform=ax.transAxes, fontsize=15, weight="bold", color="#1f2933")
         cbar = fig.colorbar(mappable, ax=ax, shrink=0.54, pad=0.01)
         cbar.set_label(cbar_label, fontsize=9)
-    return save_figure(fig, outdir, FIGURE_FILENAMES["panel"], RU["mechanics_panel_title"], "panel")
+    return save_figure(fig, outdir, FIGURE_FILENAMES["panel"], RU["mechanics_panel_title"], "panel", save_pdf=False, dpi=220, tight=False)
 
 
 def _resolve_path_from_values(files: ResultFiles, values: Mapping[str, Any], key: str, fallback: Path | None) -> Path | None:
