@@ -1,0 +1,11 @@
+numpy
+pyyaml
+
+[fem]
+dolfinx
+mpi4py
+gmsh
+
+[tables]
+pandas
+pyarrow

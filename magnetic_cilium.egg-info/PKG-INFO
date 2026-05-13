@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: magnetic-cilium
+Version: 0.2.0
+Summary: FEM and magnetic postprocessing pipeline for a two-layer magnetic cilium Hall sensor model.
+Requires-Python: >=3.10
+Requires-Dist: numpy
+Requires-Dist: pyyaml
+Provides-Extra: fem
+Requires-Dist: dolfinx; extra == "fem"
+Requires-Dist: mpi4py; extra == "fem"
+Requires-Dist: gmsh; extra == "fem"
+Provides-Extra: tables
+Requires-Dist: pandas; extra == "tables"
+Requires-Dist: pyarrow; extra == "tables"
