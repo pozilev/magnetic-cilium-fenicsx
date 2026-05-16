@@ -12,7 +12,7 @@ from petsc4py import PETSc
 from dolfinx import fem, geometry, mesh, default_scalar_type
 from dolfinx.fem import petsc as fem_petsc
 
-from magnetic_cilium.magnetics.dipole import compute_cell_deformation_gradient_P1, rotation_from_deformation_gradient
+from magnetic_cilium.magnetics.dipole import compute_cell_deformation_gradient_P1, magnetization_vector_from_deformation_gradient
 from magnetic_cilium.mechanics.backend import create_dolfinx_mesh_3d
 from magnetic_cilium.config.params import ModelParams
 from magnetic_cilium.magnetics.sensor import make_sensor_sample_points, sensor_average_requested_points, sensor_effective_area
@@ -93,9 +93,6 @@ def build_air_box_mesh(
 
 
 def mechanical_magnetic_tets(mechanics_domain, material, u_vertices: np.ndarray, params: ModelParams, deformed: bool):
-    mu0 = 4.0 * np.pi * 1e-7
-    M0_ref = np.array([0.0, 0.0, params.Br_magnetic / mu0], dtype=np.float64)
-
     tdim = mechanics_domain.topology.dim
     mechanics_domain.topology.create_connectivity(tdim, 0)
     c_to_v = mechanics_domain.topology.connectivity(tdim, 0)
@@ -118,14 +115,11 @@ def mechanical_magnetic_tets(mechanics_domain, material, u_vertices: np.ndarray,
 
         if deformed:
             tet = X + uX
-            if params.rotate_magnetization:
-                F = compute_cell_deformation_gradient_P1(X, uX)
-                M = rotation_from_deformation_gradient(F) @ M0_ref
-            else:
-                M = M0_ref.copy()
+            F = compute_cell_deformation_gradient_P1(X, uX)
+            M = magnetization_vector_from_deformation_gradient(F, params, deformed=True)
         else:
             tet = X
-            M = M0_ref.copy()
+            M = magnetization_vector_from_deformation_gradient(None, params, deformed=False)
 
         tet_points.append(tet)
         tet_M.append(M)
@@ -363,6 +357,11 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
     params_dict["sensor_y"] = args.sensor_y
     params_dict["sensor_z"] = args.sensor_z
     params_dict["rotate_magnetization"] = not args.no_rotate_magnetization
+    params_dict["magnetization_model"] = getattr(args, "magnetization_model", None)
+    params_dict["theta_mu_rad"] = float(getattr(args, "theta_mu_rad", 0.0) or 0.0)
+    params_dict["follow_factor_alpha"] = float(getattr(args, "follow_factor_alpha", 1.0) or 0.0)
+    params_dict["dipole_mode"] = getattr(args, "dipole_mode", "tetrahedral")
+    params_dict["n_point_dipoles"] = int(getattr(args, "n_point_dipoles", 8) or 8)
     params = ModelParams(**params_dict)
 
     sensor_point = np.array([params.sensor_x, params.sensor_y, params.sensor_z], dtype=np.float64)
@@ -475,6 +474,12 @@ def compute_magnetostatic_fem_diagnostics(mechanics_domain, material, u_vertices
 
     diagnostics = {
         "Br_magnetic_T": params.Br_magnetic,
+        "magnetization_model": getattr(params, "magnetization_model", None) or (
+            "rotate_with_material" if params.rotate_magnetization else "fixed_global"
+        ),
+        "rotate_magnetization": params.rotate_magnetization,
+        "theta_mu_deg": float(np.rad2deg(float(getattr(params, "theta_mu_rad", 0.0) or 0.0))),
+        "follow_factor_alpha": float(getattr(params, "follow_factor_alpha", 1.0) or 0.0),
         "magnetic_boundary": args.magnetic_boundary,
         "sensor_average": bool(args.sensor_average),
         "sensor_average_radius_m": float(args.sensor_average_radius),

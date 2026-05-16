@@ -51,9 +51,21 @@ class ModelParams:
     sensor_y: float = 0.0
     sensor_z: float = -50e-6
     rotate_magnetization: bool = True
+    magnetization_model: str | None = None
+    theta_mu_rad: float = 0.0
+    follow_factor_alpha: float = 1.0
+    dipole_mode: str = "tetrahedral"
+    n_point_dipoles: int = 8
+    compare_magnetization_models: bool = False
+    comparison_magnetization_models: tuple[str, ...] = ()
+    comparison_dipole_modes: tuple[str, ...] = ()
+    plot_magnetization_hall: bool = False
 
     # Output
     outdir: str = default_results_path("magnetic_cilium_3d_results")
+    save_mechanics_frames: bool = False
+    mechanics_frames_every: int = 1
+    mechanics_animation: bool = False
 
     @property
     def R(self) -> float:
@@ -103,6 +115,8 @@ def load_yaml_config(path: str) -> dict:
         config["delta"] = config["delta_x"]
     if "rotate_magnetization" in config and "no_rotate_magnetization" not in config:
         config["no_rotate_magnetization"] = not bool(config["rotate_magnetization"])
+    if "theta_mu_deg" in config and "theta_mu_rad" not in config:
+        config["theta_mu_rad"] = float(config["theta_mu_deg"]) * 3.141592653589793 / 180.0
     return config
 
 
@@ -205,6 +219,25 @@ def parse_args():
     parser.add_argument("--sensor-z-over-r", type=float, default=cfg("sensor_z_over_r", None))
     parser.add_argument("--no-rotate-magnetization", dest="no_rotate_magnetization", action="store_true", default=cfg("no_rotate_magnetization", False))
     parser.add_argument("--rotate-magnetization", dest="no_rotate_magnetization", action="store_false")
+    parser.add_argument(
+        "--magnetization-model",
+        choices=["fixed_global", "rotate_with_material", "prescribed_theta_mu", "follow_factor"],
+        default=cfg("magnetization_model", None),
+        help="Optional explicit magnetization orientation law. Legacy rotate_magnetization is used when omitted.",
+    )
+    parser.add_argument("--theta-mu-rad", type=float, default=cfg("theta_mu_rad", cfg("theta_mu", 0.0)))
+    parser.add_argument("--theta-mu-deg", type=float, default=cfg("theta_mu_deg", None))
+    parser.add_argument("--follow-factor-alpha", type=float, default=cfg("follow_factor_alpha", cfg("alpha", 1.0)))
+    parser.add_argument(
+        "--dipole-mode",
+        choices=["tetrahedral", "tip_single_dipole", "n_point_dipoles"],
+        default=cfg("dipole_mode", "tetrahedral"),
+    )
+    parser.add_argument("--n-point-dipoles", type=int, default=cfg("n_point_dipoles", cfg("n_dipoles", 8)))
+    parser.add_argument("--compare-magnetization-models", action="store_true", default=cfg("compare_magnetization_models", False))
+    parser.add_argument("--comparison-magnetization-models", nargs="+", default=cfg("comparison_magnetization_models", ()))
+    parser.add_argument("--comparison-dipole-modes", nargs="+", default=cfg("comparison_dipole_modes", ()))
+    parser.add_argument("--plot-magnetization-hall", action="store_true", default=cfg("plot_magnetization_hall", False))
     parser.add_argument("--target-sensitivity-uT-per-uN", type=float, default=cfg("target_sensitivity_uT_per_uN", 1.0))
     parser.add_argument("--air-radius-factor", type=float, default=cfg("air_radius_factor", 8.0))
     parser.add_argument("--air-below-factor", type=float, default=cfg("air_below_factor", 4.0))
@@ -222,9 +255,30 @@ def parse_args():
     parser.add_argument("--projection-mode", choices=["cell_center"], default=cfg("projection_mode", "cell_center"))
     parser.add_argument("--max-air-cells", type=int, default=cfg("max_air_cells", 700000))
     parser.add_argument("--allow-large-air-mesh", action="store_true", default=cfg("allow_large_air_mesh", False))
+    parser.add_argument("--save-mechanics-frames", action="store_true", default=cfg("save_mechanics_frames", False))
+    parser.add_argument("--mechanics-frames-every", type=int, default=cfg("mechanics_frames_every", 1))
+    parser.add_argument("--mechanics-animation", action="store_true", default=cfg("mechanics_animation", False))
 
     args = parser.parse_args()
     args.config = pre_args.config
+    if args.theta_mu_deg is not None:
+        args.theta_mu_rad = float(args.theta_mu_deg) * np_pi() / 180.0
+    if isinstance(args.comparison_magnetization_models, str):
+        args.comparison_magnetization_models = tuple(
+            part.strip() for part in args.comparison_magnetization_models.replace(",", " ").split() if part.strip()
+        )
+    elif args.comparison_magnetization_models is None:
+        args.comparison_magnetization_models = ()
+    else:
+        args.comparison_magnetization_models = tuple(args.comparison_magnetization_models)
+    if isinstance(args.comparison_dipole_modes, str):
+        args.comparison_dipole_modes = tuple(
+            part.strip() for part in args.comparison_dipole_modes.replace(",", " ").split() if part.strip()
+        )
+    elif args.comparison_dipole_modes is None:
+        args.comparison_dipole_modes = ()
+    else:
+        args.comparison_dipole_modes = tuple(args.comparison_dipole_modes)
     if args.h_air_near is None:
         args.h_air_near = args.h_air
     if args.h_air_far is None:
@@ -239,13 +293,14 @@ def parse_args():
 
     magnetic_modes = {"magnetics", "magnetic-only", "magnetics-fem"}
     if args.mode in magnetic_modes:
+        sensor_x_from_config = "sensor_x" in config_defaults
         sensor_x_over_r_from_config = "sensor_x_over_r" in config_defaults
         sensor_y_over_r_from_config = "sensor_y_over_r" in config_defaults
         sensor_z_from_config = "sensor_z" in config_defaults
         sensor_z_over_r_from_config = "sensor_z_over_r" in config_defaults
-        if args.sensor_x_over_r is None and not cli_has("--sensor-x") and not sensor_x_over_r_from_config:
+        if args.sensor_x_over_r is None and not cli_has("--sensor-x") and not sensor_x_from_config and not sensor_x_over_r_from_config:
             args.sensor_x_over_r = 1.0
-        if args.sensor_x_over_r is not None and not cli_has("--sensor-x"):
+        if args.sensor_x_over_r is not None and not cli_has("--sensor-x") and not sensor_x_from_config:
             args.sensor_x = args.sensor_x_over_r * (args.D / 2.0)
         if args.sensor_y_over_r is not None and not cli_has("--sensor-y"):
             args.sensor_y = args.sensor_y_over_r * (args.D / 2.0)
@@ -291,5 +346,21 @@ def make_params_from_args(args, outdir: str) -> ModelParams:
         sensor_y=args.sensor_y,
         sensor_z=args.sensor_z,
         rotate_magnetization=not args.no_rotate_magnetization,
+        magnetization_model=args.magnetization_model,
+        theta_mu_rad=args.theta_mu_rad,
+        follow_factor_alpha=args.follow_factor_alpha,
+        dipole_mode=args.dipole_mode,
+        n_point_dipoles=args.n_point_dipoles,
+        compare_magnetization_models=bool(args.compare_magnetization_models),
+        comparison_magnetization_models=tuple(args.comparison_magnetization_models or ()),
+        comparison_dipole_modes=tuple(args.comparison_dipole_modes or ()),
+        plot_magnetization_hall=bool(args.plot_magnetization_hall),
         outdir=outdir,
+        save_mechanics_frames=bool(args.save_mechanics_frames),
+        mechanics_frames_every=max(1, int(args.mechanics_frames_every)),
+        mechanics_animation=bool(args.mechanics_animation),
     )
+
+
+def np_pi() -> float:
+    return 3.141592653589793

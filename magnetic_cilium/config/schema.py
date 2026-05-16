@@ -39,6 +39,18 @@ def _str(mapping: dict[str, Any], *keys: str, default: str | None = None) -> str
     return default
 
 
+def _str_list(mapping: dict[str, Any], *keys: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+    for key in keys:
+        if key not in mapping or mapping[key] is None:
+            continue
+        value = mapping[key]
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.replace(",", " ").split() if part.strip())
+        if isinstance(value, (list, tuple)):
+            return tuple(str(item).strip() for item in value if str(item).strip())
+    return default
+
+
 def _require_positive(name: str, value: float, errors: list[str]) -> None:
     if value <= 0.0:
         errors.append(f"{name} must be positive, got {value!r}")
@@ -157,6 +169,9 @@ class MechanicsConfig:
     delta_x: float = 0.32e-3
     n_steps: int = 12
     target_reaction_uN: float = 60.0
+    save_mechanics_frames: bool = False
+    mechanics_frames_every: int = 1
+    mechanics_animation: bool = False
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> MechanicsConfig:
@@ -165,6 +180,9 @@ class MechanicsConfig:
             delta_x=_float(data, "delta_x", "delta", default=cls.delta_x),
             n_steps=_int(data, "n_steps", default=cls.n_steps),
             target_reaction_uN=_float(data, "target_reaction_uN", default=cls.target_reaction_uN),
+            save_mechanics_frames=_as_bool(data.get("save_mechanics_frames"), cls.save_mechanics_frames),
+            mechanics_frames_every=_int(data, "mechanics_frames_every", default=cls.mechanics_frames_every),
+            mechanics_animation=_as_bool(data.get("mechanics_animation"), cls.mechanics_animation),
         )
 
     def validate(self, errors: list[str]) -> None:
@@ -172,6 +190,8 @@ class MechanicsConfig:
             errors.append(f"mechanics.load_type={self.load_type!r} is not supported yet")
         if self.n_steps < 1:
             errors.append(f"mechanics.n_steps must be >= 1, got {self.n_steps!r}")
+        if self.mechanics_frames_every < 1:
+            errors.append(f"mechanics.mechanics_frames_every must be >= 1, got {self.mechanics_frames_every!r}")
         _require_nonnegative("mechanics.delta_x", self.delta_x, errors)
         _require_positive("mechanics.target_reaction_uN", self.target_reaction_uN, errors)
 
@@ -183,6 +203,15 @@ class MagneticConfig:
     sensor_y: float = 0.0
     sensor_z: float = -50e-6
     rotate_magnetization: bool = True
+    magnetization_model: str | None = None
+    theta_mu_rad: float = 0.0
+    follow_factor_alpha: float = 1.0
+    dipole_mode: str = "tetrahedral"
+    n_point_dipoles: int = 8
+    compare_magnetization_models: bool = False
+    comparison_magnetization_models: tuple[str, ...] = ()
+    comparison_dipole_modes: tuple[str, ...] = ()
+    plot_magnetization_hall: bool = False
     magnetic_boundary: str = "natural"
     sensor_average: bool = False
     sensor_average_radius: float = 25e-6
@@ -207,12 +236,30 @@ class MagneticConfig:
             sensor_y = float(data["sensor_y_over_r"]) * geometry.R
         if sensor_z is None and data.get("sensor_z_over_r") is not None:
             sensor_z = float(data["sensor_z_over_r"]) * geometry.R
+        theta_mu_rad = _float(data, "theta_mu_rad", "theta_mu", default=cls.theta_mu_rad)
+        if data.get("theta_mu_deg") is not None:
+            theta_mu_rad = float(data["theta_mu_deg"]) * 3.141592653589793 / 180.0
         return cls(
             Br_magnetic=_float(data, "Br_magnetic", "Br", default=cls.Br_magnetic),
             sensor_x=float(sensor_x if sensor_x is not None else cls.sensor_x),
             sensor_y=float(sensor_y if sensor_y is not None else cls.sensor_y),
             sensor_z=float(sensor_z if sensor_z is not None else cls.sensor_z),
             rotate_magnetization=_as_bool(data.get("rotate_magnetization"), cls.rotate_magnetization),
+            magnetization_model=_str(data, "magnetization_model", default=cls.magnetization_model),
+            theta_mu_rad=theta_mu_rad,
+            follow_factor_alpha=_float(data, "follow_factor_alpha", "alpha", default=cls.follow_factor_alpha),
+            dipole_mode=str(data.get("dipole_mode", cls.dipole_mode)),
+            n_point_dipoles=_int(data, "n_point_dipoles", "n_dipoles", default=cls.n_point_dipoles),
+            compare_magnetization_models=_as_bool(
+                data.get("compare_magnetization_models"), cls.compare_magnetization_models
+            ),
+            comparison_magnetization_models=_str_list(
+                data, "comparison_magnetization_models", default=cls.comparison_magnetization_models
+            ),
+            comparison_dipole_modes=_str_list(
+                data, "comparison_dipole_modes", default=cls.comparison_dipole_modes
+            ),
+            plot_magnetization_hall=_as_bool(data.get("plot_magnetization_hall"), cls.plot_magnetization_hall),
             magnetic_boundary=str(data.get("magnetic_boundary", cls.magnetic_boundary)),
             sensor_average=_as_bool(data.get("sensor_average"), cls.sensor_average),
             sensor_average_radius=_float(data, "sensor_average_radius", default=cls.sensor_average_radius),
@@ -231,6 +278,27 @@ class MagneticConfig:
 
     def validate(self, errors: list[str]) -> None:
         _require_nonnegative("magnetics.Br_magnetic", self.Br_magnetic, errors)
+        if self.magnetization_model not in {None, "fixed_global", "rotate_with_material", "prescribed_theta_mu", "follow_factor"}:
+            errors.append(
+                "magnetics.magnetization_model must be fixed_global, rotate_with_material, "
+                f"prescribed_theta_mu, follow_factor, or omitted; got {self.magnetization_model!r}"
+            )
+        if self.dipole_mode not in {"tetrahedral", "tip_single_dipole", "n_point_dipoles"}:
+            errors.append(
+                "magnetics.dipole_mode must be tetrahedral, tip_single_dipole, or "
+                f"n_point_dipoles, got {self.dipole_mode!r}"
+            )
+        if self.n_point_dipoles < 1:
+            errors.append(f"magnetics.n_point_dipoles must be >= 1, got {self.n_point_dipoles!r}")
+        invalid_comparison_modes = [
+            mode for mode in self.comparison_dipole_modes
+            if mode not in {"tetrahedral", "tip_single_dipole", "n_point_dipoles"}
+        ]
+        if invalid_comparison_modes:
+            errors.append(
+                "magnetics.comparison_dipole_modes contains unsupported values: "
+                f"{invalid_comparison_modes!r}"
+            )
         if self.magnetic_boundary not in {"natural", "dirichlet_zero"}:
             errors.append(f"magnetics.magnetic_boundary must be natural or dirichlet_zero, got {self.magnetic_boundary!r}")
         if self.projection_mode not in {"cell_center"}:
