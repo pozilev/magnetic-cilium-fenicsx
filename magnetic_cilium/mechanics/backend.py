@@ -260,7 +260,7 @@ def locate_bottom_and_top_facets(domain, params: ModelParams):
     return bottom_facets, control_facets
 
 
-def solve_hyperelasticity_displacement_control_3d(domain, E, nu, params: ModelParams):
+def solve_hyperelasticity_displacement_control_3d(domain, E, nu, params: ModelParams, step_callback=None):
     log.info("model: nonlinear Neo-Hookean top-face displacement-control mechanics")
     gdim = domain.geometry.dim
     fdim = domain.topology.dim - 1
@@ -316,6 +316,17 @@ def solve_hyperelasticity_displacement_control_3d(domain, E, nu, params: ModelPa
             "nonlinear step %02d/%02d: delta_x = %.6e m, Newton iters = %d, converged = %s",
             step, params.n_steps, alpha * params.delta_x, n_iter, converged,
         )
+        if step_callback is not None:
+            step_callback(
+                step=step,
+                total_steps=params.n_steps,
+                alpha=alpha,
+                displacement=u,
+                domain=domain,
+                params=params,
+                newton_iterations=n_iter,
+                converged=bool(converged),
+            )
         if not converged:
             raise RuntimeError(f"Newton did not converge at step {step}/{params.n_steps}")
 

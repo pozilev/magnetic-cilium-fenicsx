@@ -26,7 +26,12 @@ from magnetic_cilium.mechanics.backend import (
     solve_hyperelasticity_displacement_control_3d,
     validate_result_quality,
 )
-from magnetic_cilium.magnetics.dipole import compute_magnetic_dipole_diagnostics, log_magnetic_diagnostics
+from magnetic_cilium.magnetics.dipole import (
+    compute_magnetic_dipole_diagnostics,
+    compute_magnetization_model_comparison,
+    log_magnetic_diagnostics,
+    normalize_magnetization_model_list,
+)
 from magnetic_cilium.io.master_table import append_master_results, resolve_experiment_id
 
 
@@ -138,6 +143,15 @@ def override_magnetic_params(params: ModelParams, args) -> ModelParams:
     d["sensor_y"] = args.sensor_y
     d["sensor_z"] = args.sensor_z
     d["rotate_magnetization"] = not args.no_rotate_magnetization
+    d["magnetization_model"] = args.magnetization_model
+    d["theta_mu_rad"] = args.theta_mu_rad
+    d["follow_factor_alpha"] = args.follow_factor_alpha
+    d["dipole_mode"] = args.dipole_mode
+    d["n_point_dipoles"] = args.n_point_dipoles
+    d["compare_magnetization_models"] = bool(args.compare_magnetization_models)
+    d["comparison_magnetization_models"] = tuple(args.comparison_magnetization_models or ())
+    d["comparison_dipole_modes"] = tuple(args.comparison_dipole_modes or ())
+    d["plot_magnetization_hall"] = bool(args.plot_magnetization_hall)
     return ModelParams(**d)
 
 
@@ -148,17 +162,37 @@ def summary_columns() -> List[str]:
         "reaction_error_to_60uN_percent", "J_min", "J_max", "von_mises_min_Pa", "von_mises_max_Pa",
         "volume_substrate_m3", "volume_lower_m3", "volume_upper_m3", "expected_layer_volume_m3",
         "lower_volume_rel_error_percent", "upper_volume_rel_error_percent", "restart_file",
-        "Br_magnetic_T", "M_magnetic_A_per_m", "sensor_x_m", "sensor_y_m", "sensor_z_m", "rotate_magnetization",
+        "Br_magnetic_T", "M_magnetic_A_per_m", "sensor_x_m", "sensor_y_m", "sensor_z_m",
+        "magnetization_model", "rotate_magnetization", "legacy_rotate_magnetization_input",
+        "dipole_mode", "theta_mu_rad", "theta_mu_deg", "follow_factor_alpha", "n_point_dipoles",
         "sensor_average", "sensor_average_radius_m", "sensor_average_n",
         "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
-        "magnetic_dipole_cells", "magnetic_dipole_volume_m3", "magnetic_initial_volume_m3", "magnetic_deformed_volume_m3",
+        "magnetic_source_cells", "magnetic_source_volume_m3",
+        "magnetic_dipole_cells", "magnetic_dipole_points", "magnetic_dipole_points_requested",
+        "magnetic_dipole_volume_m3", "magnetic_initial_volume_m3", "magnetic_deformed_volume_m3",
         "magnetic_min_distance_to_sensor_m", "magnetic_skipped_near_cells",
+        "magnetization_mean_unit_x", "magnetization_mean_unit_y", "magnetization_mean_unit_z",
+        "magnetization_mean_unit_norm", "magnetization_mean_magnitude_A_per_m",
+        "sensor_normal_unit_x", "sensor_normal_unit_y", "sensor_normal_unit_z",
+        "dipole_magnetization_angle_to_normal_min_deg",
+        "dipole_magnetization_angle_to_normal_mean_deg",
+        "dipole_magnetization_angle_to_normal_max_deg",
+        "theta_mu_to_global_z_min_deg", "theta_mu_to_global_z_mean_deg", "theta_mu_to_global_z_max_deg",
+        "geometry_theta_to_global_z_min_deg", "geometry_theta_to_global_z_mean_deg", "geometry_theta_to_global_z_max_deg",
+        "theta_mu_minus_geometry_theta_min_deg", "theta_mu_minus_geometry_theta_mean_deg", "theta_mu_minus_geometry_theta_max_deg",
+        "magnetization_sum_moment_x_A_m2", "magnetization_sum_moment_y_A_m2",
+        "magnetization_sum_moment_z_A_m2", "magnetization_sum_moment_norm_A_m2",
+        "magnetization_moment_center_x_m", "magnetization_moment_center_y_m", "magnetization_moment_center_z_m",
+        "magnetic_segment_centroid_x_m", "magnetic_segment_centroid_y_m", "magnetic_segment_centroid_z_m",
+        "magnetic_segment_min_x_m", "magnetic_segment_min_y_m", "magnetic_segment_min_z_m",
+        "magnetic_segment_max_x_m", "magnetic_segment_max_y_m", "magnetic_segment_max_z_m",
         "B0_sensor_x_T", "B0_sensor_y_T", "B0_sensor_z_T", "B0_sensor_norm_T",
         "B1_sensor_x_T", "B1_sensor_y_T", "B1_sensor_z_T", "B1_sensor_norm_T",
         "dB_sensor_x_T", "dB_sensor_y_T", "dB_sensor_z_T", "dB_sensor_norm_T",
         "B0_sensor_x_uT", "B0_sensor_y_uT", "B0_sensor_z_uT", "B0_sensor_norm_uT",
         "B1_sensor_x_uT", "B1_sensor_y_uT", "B1_sensor_z_uT", "B1_sensor_norm_uT",
         "dB_sensor_x_uT", "dB_sensor_y_uT", "dB_sensor_z_uT", "dB_sensor_norm_uT",
+        "abs_dB_sensor_x_uT", "abs_dB_sensor_y_uT", "abs_dB_sensor_z_uT",
         "B_before_x_T", "B_before_y_T", "B_before_z_T", "B_before_norm_T",
         "B_after_x_T", "B_after_y_T", "B_after_z_T", "B_after_norm_T",
         "delta_B_x_T", "delta_B_y_T", "delta_B_z_T", "delta_B_norm_T",
@@ -201,6 +235,10 @@ def print_summary(results: List[Dict[str, Any]], summary_path: str) -> None:
         if "reaction_force_x_uN" in r:
             s += f", reaction={r['reaction_force_x_uN']:.3f} uN, err60={r['reaction_error_to_60uN_percent']:.1f}%, J=[{r['J_min']:.4f}, {r['J_max']:.4f}], vm_max={r['von_mises_max_Pa']:.3e} Pa"
         if "dB_sensor_norm_uT" in r:
+            model = r.get("magnetization_model", "")
+            mode = r.get("dipole_mode", "")
+            if model or mode:
+                s += f", M_model={model or 'legacy'}, dipole={mode or 'tetrahedral'}"
             s += f", dB=[{r['dB_sensor_x_uT']:.2f}, {r['dB_sensor_y_uT']:.2f}, {r['dB_sensor_z_uT']:.2f}] uT, |dB|={r['dB_sensor_norm_uT']:.2f} uT"
         if "restart_file" in r:
             s += f", restart={r['restart_file']}"
@@ -232,7 +270,25 @@ def run_mechanics_case(params: ModelParams, run_id: int, study: str) -> Dict[str
     log.info("volume: upper magnetic cilium = %.9e m^3", material_volumes[2])
     log.info("volume: expected lower/upper layer volume = %.9e m^3", expected_layer_volume)
 
-    uh, max_ux, reaction_force_x, _, _ = solve_hyperelasticity_displacement_control_3d(domain, E, nu, params)
+    frame_recorder = None
+    if getattr(params, "save_mechanics_frames", False):
+        try:
+            from magnetic_cilium.visualization.mechanics import MechanicsFrameRecorder
+
+            frame_recorder = MechanicsFrameRecorder(
+                os.path.join(params.outdir, "mechanics_frames"),
+                every=max(1, int(getattr(params, "mechanics_frames_every", 1))),
+                make_animation=bool(getattr(params, "mechanics_animation", False)),
+            )
+            log.info("mechanics: deformation frame recorder enabled: %s", frame_recorder.outdir)
+        except ModuleNotFoundError as exc:
+            log.warning("mechanics: deformation frames disabled: missing dependency %s", exc.name)
+            frame_recorder = None
+    uh, max_ux, reaction_force_x, _, _ = solve_hyperelasticity_displacement_control_3d(
+        domain, E, nu, params, step_callback=frame_recorder
+    )
+    if frame_recorder is not None:
+        frame_recorder.finalize()
     J_field, J_min, J_max = compute_J_field(domain, uh)
     log.info("validation: min J = %.9e", J_min)
     log.info("validation: max J = %.9e", J_max)
@@ -319,6 +375,93 @@ def run_magnetics_case_from_objects(
     return result
 
 
+def write_magnetization_model_comparison(results: List[Dict[str, Any]], outdir: str) -> tuple[str, str]:
+    os.makedirs(outdir, exist_ok=True)
+    csv_path = os.path.join(outdir, "magnetization_model_comparison.csv")
+    json_path = os.path.join(outdir, "magnetization_model_comparison.json")
+    columns = summary_columns()
+    extra_columns = sorted({key for result in results for key in result if not key.startswith("_")} - set(columns))
+    fieldnames = columns + extra_columns
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            writer.writerow({key: result.get(key, "") for key in fieldnames})
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(make_json_safe([{k: v for k, v in result.items() if not k.startswith("_")} for result in results]), f, indent=2)
+    log.info("magnetics: magnetization model comparison saved: %s, %s", csv_path, json_path)
+    return csv_path, json_path
+
+
+def plot_magnetization_hall_if_requested(results: List[Dict[str, Any]], outdir: str, enabled: bool) -> None:
+    if not enabled:
+        return
+    try:
+        from magnetic_cilium.visualization.magnetics import plot_magnetization_hall_schematic
+    except ModuleNotFoundError as exc:
+        log.warning("magnetics: Hall/magnetization schematic skipped: missing dependency %s", exc.name)
+        return
+    except Exception as exc:
+        log.warning("magnetics: Hall/magnetization schematic unavailable: %s", exc)
+        return
+
+    figures_dir = os.path.join(outdir, "figures")
+    os.makedirs(figures_dir, exist_ok=True)
+    for result in results:
+        model = str(result.get("magnetization_model", "legacy")).replace("/", "_")
+        mode = str(result.get("dipole_mode", "tetrahedral")).replace("/", "_")
+        base = os.path.join(figures_dir, f"magnetization_hall_{mode}_{model}")
+        try:
+            png_path, svg_path = plot_magnetization_hall_schematic(result, base)
+            result["magnetization_hall_png"] = png_path
+            result["magnetization_hall_svg"] = svg_path
+        except Exception as exc:
+            log.warning("magnetics: Hall/magnetization schematic skipped for model=%s: %s", model, exc)
+
+
+def run_magnetization_model_comparison_from_objects(
+        domain,
+        material,
+        u_vertices: np.ndarray,
+        params: ModelParams,
+        base_result: Dict[str, Any],
+        sensor_average: bool = False,
+        sensor_average_radius: float = 25e-6,
+        sensor_average_n: int = 5,
+    ) -> List[Dict[str, Any]]:
+    models = normalize_magnetization_model_list(params.comparison_magnetization_models, params)
+    dipole_modes = tuple(getattr(params, "comparison_dipole_modes", ()) or ())
+    if not dipole_modes:
+        dipole_modes = (params.dipole_mode,)
+    log.info(
+        "MAGNETICS MODEL COMPARISON: magnetization_models=%s, dipole_modes=%s",
+        ", ".join(models),
+        ", ".join(dipole_modes),
+    )
+    raw_results: List[Dict[str, Any]] = []
+    for dipole_mode in dipole_modes:
+        mode_params = ModelParams(**{**asdict(params), "dipole_mode": dipole_mode})
+        raw_results.extend(
+            compute_magnetization_model_comparison(
+                domain,
+                u_vertices,
+                material,
+                mode_params,
+                models=models,
+                sensor_average=sensor_average,
+                sensor_average_radius=sensor_average_radius,
+                sensor_average_n=sensor_average_n,
+            )
+        )
+    results: List[Dict[str, Any]] = []
+    for magnetic_diag in raw_results:
+        log_magnetic_diagnostics(magnetic_diag)
+        result = {k: v for k, v in base_result.items() if not k.startswith("_")}
+        result.update(magnetic_diag)
+        results.append(result)
+    return results
+
+
 def run_full_case(params: ModelParams, run_id: int, study: str) -> Dict[str, Any]:
     mechanics_result = run_mechanics_case(params, run_id, study)
     result = run_magnetics_case_from_objects(
@@ -334,50 +477,69 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
         raise RuntimeError("--restart-dir is required for --mode magnetics")
     domain, material, u_vertices, saved_params, mechanics_result = load_mechanics_restart(args.restart_dir)
     params = override_magnetic_params(saved_params, args)
-    result = run_magnetics_case_from_objects(
-        domain,
-        material,
-        u_vertices,
-        params,
-        mechanics_result,
-        sensor_average=bool(args.sensor_average),
-        sensor_average_radius=float(args.sensor_average_radius),
-        sensor_average_n=int(args.sensor_average_n),
-    )
-    result["study"] = "magnetics_from_restart"
-    reaction_uN = float(result.get("reaction_force_x_uN", mechanics_result.get("reaction_force_x_uN", 0.0)) or 0.0)
-    target_signal_uT = float(args.target_sensitivity_uT_per_uN) * reaction_uN
-    required_Br_norm = required_Br_for_target(
-        float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
-    )
-    result.update(
-        {
-            "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
-            "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
-            "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
-            "sensor_depth_mm": -1000.0 * params.sensor_z,
-            "target_sensitivity_uT_per_uN": args.target_sensitivity_uT_per_uN,
-            "target_dB_uT": target_signal_uT,
-            "target_ratio_norm": (
-                float(result["dB_sensor_norm_uT"]) / target_signal_uT
-                if abs(target_signal_uT) > 1e-30 else None
-            ),
-            "required_Br_for_target_norm_T": required_Br_norm,
-            "required_Br_ratio_norm": (
-                required_Br_norm / float(result["Br_magnetic_T"])
-                if required_Br_norm is not None and abs(float(result["Br_magnetic_T"])) > 1e-30 else None
-            ),
-        }
-    )
-    result["under_cilium_sensor_case_ok"] = is_under_cilium_sensor_case(result)
+    if bool(args.compare_magnetization_models):
+        results = run_magnetization_model_comparison_from_objects(
+            domain,
+            material,
+            u_vertices,
+            params,
+            mechanics_result,
+            sensor_average=bool(args.sensor_average),
+            sensor_average_radius=float(args.sensor_average_radius),
+            sensor_average_n=int(args.sensor_average_n),
+        )
+    else:
+        results = [
+            run_magnetics_case_from_objects(
+                domain,
+                material,
+                u_vertices,
+                params,
+                mechanics_result,
+                sensor_average=bool(args.sensor_average),
+                sensor_average_radius=float(args.sensor_average_radius),
+                sensor_average_n=int(args.sensor_average_n),
+            )
+        ]
+
+    for result in results:
+        result["study"] = "magnetics_from_restart"
+        reaction_uN = float(result.get("reaction_force_x_uN", mechanics_result.get("reaction_force_x_uN", 0.0)) or 0.0)
+        target_signal_uT = float(args.target_sensitivity_uT_per_uN) * reaction_uN
+        required_Br_norm = required_Br_for_target(
+            float(result["Br_magnetic_T"]), float(result["dB_sensor_norm_uT"]), target_signal_uT
+        )
+        result.update(
+            {
+                "sensor_x_over_R": params.sensor_x / params.R if params.R > 0.0 else "",
+                "sensor_y_over_R": params.sensor_y / params.R if params.R > 0.0 else "",
+                "sensor_z_over_R": params.sensor_z / params.R if params.R > 0.0 else "",
+                "sensor_depth_mm": -1000.0 * params.sensor_z,
+                "target_sensitivity_uT_per_uN": args.target_sensitivity_uT_per_uN,
+                "target_dB_uT": target_signal_uT,
+                "target_ratio_norm": (
+                    float(result["dB_sensor_norm_uT"]) / target_signal_uT
+                    if abs(target_signal_uT) > 1e-30 else None
+                ),
+                "required_Br_for_target_norm_T": required_Br_norm,
+                "required_Br_ratio_norm": (
+                    required_Br_norm / float(result["Br_magnetic_T"])
+                    if required_Br_norm is not None and abs(float(result["Br_magnetic_T"])) > 1e-30 else None
+                ),
+            }
+        )
+        result["under_cilium_sensor_case_ok"] = is_under_cilium_sensor_case(result)
     outdir = args.outdir if args.outdir is not None else args.restart_dir
     os.makedirs(outdir, exist_ok=True)
     summary_path = args.local_summary_path or os.path.join(outdir, "magnetic_summary.csv")
-    write_summary([result], summary_path)
-    print_summary([result], summary_path)
+    write_summary(results, summary_path)
+    print_summary(results, summary_path)
+    if bool(args.compare_magnetization_models):
+        write_magnetization_model_comparison(results, outdir)
+    plot_magnetization_hall_if_requested(results, outdir, bool(args.plot_magnetization_hall))
     experiment_id = resolve_experiment_id("dipole_single", args.experiment_id, args.results_write_mode)
     append_master_results(
-        [result],
+        results,
         master_csv_path=args.master_csv_path,
         mode="dipole_single" if args.results_write_mode != "debug" else "debug",
         model_type="dipole",
@@ -386,12 +548,13 @@ def run_magnetics_from_restart(args) -> List[Dict[str, Any]]:
         restart_dir=args.restart_dir,
         max_air_cells=getattr(args, "max_air_cells", None),
     )
-    return [result]
+    return results
 
 
 def magnetic_fem_summary_columns() -> List[str]:
     return [
         "Br_magnetic_T",
+        "magnetization_model", "rotate_magnetization", "theta_mu_deg", "follow_factor_alpha",
         "magnetic_boundary",
         "sensor_average", "sensor_average_radius_m", "sensor_average_n",
         "sensor_average_points_requested", "sensor_average_points_used", "sensor_area_effective_m2",
@@ -571,6 +734,9 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         sensor_z = float(sensor_z_over_r) * saved_params.R
 
     rotate_magnetization = bool(params.get("rotate_magnetization", True))
+    theta_mu_rad = float(params.get("theta_mu_rad", params.get("theta_mu", 0.0)) or 0.0)
+    if params.get("theta_mu_deg") is not None:
+        theta_mu_rad = float(params["theta_mu_deg"]) * np.pi / 180.0
     return Namespace(
         mode="magnetics-fem",
         restart_dir=restart_dir,
@@ -583,6 +749,16 @@ def make_magnetics_fem_case_args(params: Dict[str, Any], saved_params: ModelPara
         sensor_y_over_r=sensor_y_over_r,
         sensor_z_over_r=sensor_z_over_r,
         no_rotate_magnetization=not rotate_magnetization,
+        magnetization_model=params.get("magnetization_model"),
+        theta_mu_rad=theta_mu_rad,
+        theta_mu_deg=params.get("theta_mu_deg"),
+        follow_factor_alpha=float(params.get("follow_factor_alpha", params.get("alpha", 1.0))),
+        dipole_mode=str(params.get("dipole_mode", "tetrahedral")),
+        n_point_dipoles=int(params.get("n_point_dipoles", params.get("n_dipoles", 8))),
+        compare_magnetization_models=bool(params.get("compare_magnetization_models", False)),
+        comparison_magnetization_models=tuple(params.get("comparison_magnetization_models", ()) or ()),
+        comparison_dipole_modes=tuple(params.get("comparison_dipole_modes", ()) or ()),
+        plot_magnetization_hall=bool(params.get("plot_magnetization_hall", False)),
         air_radius_factor=float(params.get("air_radius_factor", 8.0)),
         air_below_factor=float(params.get("air_below_factor", 4.0)),
         air_above_factor=float(params.get("air_above_factor", 4.0)),
@@ -1063,7 +1239,13 @@ def run_magnetic_only_validation(args) -> List[Dict[str, Any]]:
                 params_dict["sensor_x"] = sensor_x_factor * saved_params.R
                 params_dict["sensor_y"] = 0.0
                 params_dict["sensor_z"] = -sensor_gap
-                params_dict["rotate_magnetization"] = saved_params.rotate_magnetization
+                params_dict["rotate_magnetization"] = not args.no_rotate_magnetization
+                params_dict["magnetization_model"] = args.magnetization_model
+                params_dict["theta_mu_rad"] = args.theta_mu_rad
+                params_dict["follow_factor_alpha"] = args.follow_factor_alpha
+                params_dict["dipole_mode"] = args.dipole_mode
+                params_dict["n_point_dipoles"] = args.n_point_dipoles
+                params_dict["comparison_dipole_modes"] = tuple(args.comparison_dipole_modes or ())
                 params_dict["outdir"] = base_outdir
                 params = ModelParams(**params_dict)
 
@@ -1147,20 +1329,49 @@ def run_single_pipeline_case(args) -> List[Dict[str, Any]]:
     if args.mode == "mechanics":
         result = run_mechanics_case(params, 1, "final_candidate_run_mechanics_only")
         result = {k: v for k, v in result.items() if not k.startswith("_")}
+        return [result]
     else:
-        result = run_full_case(params, 1, "final_candidate_run")
+        mechanics_result = run_mechanics_case(params, 1, "final_candidate_run")
+        if bool(args.compare_magnetization_models):
+            results = run_magnetization_model_comparison_from_objects(
+                mechanics_result["_domain"],
+                mechanics_result["_material"],
+                mechanics_result["_u_vertices"],
+                params,
+                mechanics_result,
+                sensor_average=bool(args.sensor_average),
+                sensor_average_radius=float(args.sensor_average_radius),
+                sensor_average_n=int(args.sensor_average_n),
+            )
+            write_magnetization_model_comparison(results, params.outdir)
+        else:
+            results = [
+                run_magnetics_case_from_objects(
+                    mechanics_result["_domain"],
+                    mechanics_result["_material"],
+                    mechanics_result["_u_vertices"],
+                    params,
+                    mechanics_result,
+                    sensor_average=bool(args.sensor_average),
+                    sensor_average_radius=float(args.sensor_average_radius),
+                    sensor_average_n=int(args.sensor_average_n),
+                )
+            ]
+        plot_magnetization_hall_if_requested(results, params.outdir, bool(args.plot_magnetization_hall))
         experiment_id = resolve_experiment_id("dipole_single", args.experiment_id, args.results_write_mode)
         append_master_results(
-            [result],
+            results,
             master_csv_path=args.master_csv_path,
             mode="dipole_single" if args.results_write_mode != "debug" else "debug",
             model_type="dipole",
             experiment_id=experiment_id,
             config_path=args.config,
-            restart_dir=result.get("outdir", params.outdir),
+            restart_dir=params.outdir,
             max_air_cells=getattr(args, "max_air_cells", None),
         )
-    return [result]
+        del mechanics_result
+        gc.collect()
+        return results
 
 
 def run_validation_study(args) -> List[Dict[str, Any]]:

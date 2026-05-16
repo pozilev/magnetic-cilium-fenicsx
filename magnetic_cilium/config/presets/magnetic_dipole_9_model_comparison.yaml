@@ -1,0 +1,37 @@
+mode: magnetics
+restart_dir: ../results/experiment_baseline/final_P2_hcil_20um_hsub_100um_delta_0p550mm
+outdir: ../results/magnetic_dipole_9_model_comparison
+results_write_mode: experiment
+experiment_id: magnetic_dipole_9_model_comparison
+master_csv_path: ../results/magnetic_results_master.csv
+
+# Fixed magnetic and Hall sensor parameters.
+Br: 0.25
+sensor_x: 0.0
+sensor_y: 0.0
+sensor_z: -50.0e-6
+sensor_average: false
+
+# 3 x 3 magnetic-only comparison:
+# - tip_single_dipole: total moment at the free tip of the magnetic segment;
+# - n_point_dipoles: total moment split into 8 uniformly distributed points;
+# - tetrahedral: one dipole per magnetic tetrahedron.
+compare_magnetization_models: true
+comparison_dipole_modes:
+  - tip_single_dipole
+  - n_point_dipoles
+  - tetrahedral
+n_point_dipoles: 8
+
+# M0 is always technological and initially parallel to global ez.
+# fixed_global keeps M parallel to ez after deformation.
+# rotate_with_material rotates M by the local polar rotation from deformation gradient.
+# follow_factor uses theta_mu = alpha * theta; alpha=0.5 makes M rotation differ from deformation tilt.
+comparison_magnetization_models:
+  - fixed_global
+  - rotate_with_material
+  - follow_factor
+follow_factor_alpha: 0.5
+
+# Save one PNG and one SVG Hall-sensor / total-magnetization schematic for every row.
+plot_magnetization_hall: true
