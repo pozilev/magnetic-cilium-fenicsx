@@ -15,6 +15,7 @@ from magnetic_cilium.visualization.report import (
     reaction_force_uN,
     select_baseline_magnetic_row,
 )
+from magnetic_cilium.visualization.mechanics import MechanicsFrameRecorder
 
 
 HAS_PLOTTING = importlib.util.find_spec("matplotlib") is not None and importlib.util.find_spec("numpy") is not None
@@ -48,6 +49,49 @@ class VisualReportTests(unittest.TestCase):
         selected = select_baseline_magnetic_row(rows, {})
         self.assertIsNotNone(selected)
         self.assertEqual(selected["study"], "final_candidate_run")
+
+    def test_mechanics_step_recorder_writes_reaction_history_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            recorder = MechanicsFrameRecorder(
+                str(root / "frames"),
+                table_path=str(root / "mechanics_newton_steps.csv"),
+                save_frames=False,
+            )
+            points = [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+            cells = [[0, 1, 2, 3]]
+            u_vertices = [
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.2, 0.0, 0.0],
+            ]
+            recorder.record_arrays(
+                points,
+                cells,
+                u_vertices,
+                step=1,
+                total_steps=2,
+                alpha=0.5,
+                prescribed_delta_x=2.75e-4,
+                max_top_u_x=2.75e-4,
+                reaction_force_x=3.2e-5,
+                newton_iterations=4,
+                converged=True,
+            )
+
+            with (root / "mechanics_newton_steps.csv").open(encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["step"], "1")
+            self.assertAlmostEqual(float(rows[0]["prescribed_delta_x_mm"]), 0.275)
+            self.assertAlmostEqual(float(rows[0]["reaction_force_x_uN"]), 32.0)
+            self.assertEqual(rows[0]["newton_iterations"], "4")
 
     def test_discovers_real_baseline_files(self) -> None:
         result_dir = Path(__file__).resolve().parents[4] / "results" / "experiment_baseline"

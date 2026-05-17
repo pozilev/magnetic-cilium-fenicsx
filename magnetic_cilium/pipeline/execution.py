@@ -207,7 +207,7 @@ def summary_columns() -> List[str]:
         "required_Br_for_target_z_T", "required_Br_for_target_norm_T", "required_Br_ratio_norm",
         "under_cilium_sensor_case_ok",
         "is_valid", "rank_by_deltaB_norm", "rank_by_abs_dBz",
-        "run_params_json", "pvd_file",
+        "run_params_json", "pvd_file", "newton_history_csv", "mechanics_frames_dir", "mechanics_animation_gif",
     ]
 
 
@@ -270,25 +270,30 @@ def run_mechanics_case(params: ModelParams, run_id: int, study: str) -> Dict[str
     log.info("volume: upper magnetic cilium = %.9e m^3", material_volumes[2])
     log.info("volume: expected lower/upper layer volume = %.9e m^3", expected_layer_volume)
 
-    frame_recorder = None
-    if getattr(params, "save_mechanics_frames", False):
-        try:
-            from magnetic_cilium.visualization.mechanics import MechanicsFrameRecorder
+    step_recorder = None
+    try:
+        from magnetic_cilium.visualization.mechanics import MechanicsFrameRecorder
 
-            frame_recorder = MechanicsFrameRecorder(
-                os.path.join(params.outdir, "mechanics_frames"),
-                every=max(1, int(getattr(params, "mechanics_frames_every", 1))),
-                make_animation=bool(getattr(params, "mechanics_animation", False)),
-            )
-            log.info("mechanics: deformation frame recorder enabled: %s", frame_recorder.outdir)
-        except ModuleNotFoundError as exc:
-            log.warning("mechanics: deformation frames disabled: missing dependency %s", exc.name)
-            frame_recorder = None
+        save_frames = bool(getattr(params, "save_mechanics_frames", False))
+        step_recorder = MechanicsFrameRecorder(
+            os.path.join(params.outdir, "mechanics_frames"),
+            table_path=os.path.join(params.outdir, "mechanics_newton_steps.csv"),
+            every=max(1, int(getattr(params, "mechanics_frames_every", 1))),
+            make_animation=bool(getattr(params, "mechanics_animation", False)),
+            save_frames=save_frames,
+        )
+        log.info("mechanics: Newton step table enabled: %s", step_recorder.table_path)
+        if save_frames:
+            log.info("mechanics: deformation frame recorder enabled: %s", step_recorder.outdir)
+    except ModuleNotFoundError as exc:
+        log.warning("mechanics: Newton step reporting disabled: missing dependency %s", exc.name)
+        step_recorder = None
     uh, max_ux, reaction_force_x, _, _ = solve_hyperelasticity_displacement_control_3d(
-        domain, E, nu, params, step_callback=frame_recorder
+        domain, E, nu, params, step_callback=step_recorder
     )
-    if frame_recorder is not None:
-        frame_recorder.finalize()
+    mechanics_animation_gif = None
+    if step_recorder is not None:
+        mechanics_animation_gif = step_recorder.finalize()
     J_field, J_min, J_max = compute_J_field(domain, uh)
     log.info("validation: min J = %.9e", J_min)
     log.info("validation: max J = %.9e", J_max)
@@ -330,6 +335,10 @@ def run_mechanics_case(params: ModelParams, run_id: int, study: str) -> Dict[str
         "upper_volume_rel_error_percent": upper_volume_rel_error_percent,
         "pvd_file": vtk_path,
     }
+    if step_recorder is not None:
+        result["newton_history_csv"] = step_recorder.table_path
+        result["mechanics_frames_dir"] = step_recorder.outdir if step_recorder.save_frames else ""
+        result["mechanics_animation_gif"] = mechanics_animation_gif or ""
 
     result["restart_file"] = save_mechanics_restart(domain, material, u_vertices, params, result)
     validate_result_quality(params, result)

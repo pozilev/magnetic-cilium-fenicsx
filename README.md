@@ -176,6 +176,8 @@ h_substrate: 100.0e-6
 element_degree: 2
 n_steps: 10
 delta: 0.55e-3
+save_mechanics_frames: true
+mechanics_frames_every: 2
 
 Br: 0.10
 sensor_x: 0.0
@@ -217,6 +219,8 @@ element_degree  степень FEM-элементов
 delta      заданное смещение верхней части реснички по x, м
 n_steps    число шагов нагружения
 nu         коэффициент Пуассона, если используется общий параметр
+save_mechanics_frames  сохранять PNG-кадры деформации по шагам нагружения
+mechanics_frames_every сохранять каждый N-й кадр; 1 означает каждый шаг
 ```
 
 Магнитика:
@@ -240,6 +244,11 @@ master_csv_path     общий CSV со строками магнитных ра
 results_write_mode  debug или experiment
 experiment_id       человекочитаемый идентификатор серии
 ```
+
+Для механических расчетов дополнительно пишется `mechanics_newton_steps.csv`.
+В нем по каждому шагу нагружения сохранены заданное смещение, реакция по x,
+число итераций Ньютона и пути к PNG-кадрам, если включены `save_mechanics_frames`.
+Даже если `mechanics_frames_every` больше 1, CSV все равно содержит все шаги.
 
 ## 7. Пример: расчёт механики новой реснички
 

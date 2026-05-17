@@ -14,6 +14,8 @@ h_substrate: 100.0e-6
 element_degree: 2
 n_steps: 10
 delta: 0.55e-3
+save_mechanics_frames: true
+mechanics_frames_every: 2
 
 Br: 0.10
 sensor_x: 0.0

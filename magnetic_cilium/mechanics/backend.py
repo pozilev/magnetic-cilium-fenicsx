@@ -307,32 +307,47 @@ def solve_hyperelasticity_displacement_control_3d(domain, E, nu, params: ModelPa
     log.info("BC: final top displacement delta_x = %.6e m", params.delta_x)
     log.info("solve: displacement continuation steps = %d", params.n_steps)
 
+    last_max_ux = None
+    last_reaction_force_x = None
     for step in range(1, params.n_steps + 1):
         alpha = step / params.n_steps
-        control_ux.value = default_scalar_type(alpha * params.delta_x)
+        prescribed_delta_x = alpha * params.delta_x
+        control_ux.value = default_scalar_type(prescribed_delta_x)
         n_iter, converged = solver.solve(u)
         u.x.scatter_forward()
+        local_step_max_ux = np.max(np.real(u.x.array[control_dofs_x]))
+        step_max_ux = domain.comm.allreduce(local_step_max_ux, op=MPI.MAX)
+        step_reaction_force_x = compute_reaction_force_x(domain, u, E, nu, control_facets)
+        last_max_ux = step_max_ux
+        last_reaction_force_x = step_reaction_force_x
         log.info(
-            "nonlinear step %02d/%02d: delta_x = %.6e m, Newton iters = %d, converged = %s",
-            step, params.n_steps, alpha * params.delta_x, n_iter, converged,
+            "nonlinear step %02d/%02d: delta_x = %.6e m, reaction_x = %.9e N, Newton iters = %d, converged = %s",
+            step, params.n_steps, prescribed_delta_x, step_reaction_force_x, n_iter, converged,
         )
         if step_callback is not None:
             step_callback(
                 step=step,
                 total_steps=params.n_steps,
                 alpha=alpha,
+                prescribed_delta_x=prescribed_delta_x,
                 displacement=u,
                 domain=domain,
                 params=params,
                 newton_iterations=n_iter,
                 converged=bool(converged),
+                max_top_u_x=step_max_ux,
+                reaction_force_x=step_reaction_force_x,
+                reaction_force_x_uN=step_reaction_force_x * 1e6,
             )
         if not converged:
             raise RuntimeError(f"Newton did not converge at step {step}/{params.n_steps}")
 
-    local_max_ux = np.max(np.real(u.x.array[control_dofs_x]))
-    max_ux = domain.comm.allreduce(local_max_ux, op=MPI.MAX)
-    reaction_force_x = compute_reaction_force_x(domain, u, E, nu, control_facets)
+    max_ux = last_max_ux
+    reaction_force_x = last_reaction_force_x
+    if max_ux is None or reaction_force_x is None:
+        local_max_ux = np.max(np.real(u.x.array[control_dofs_x]))
+        max_ux = domain.comm.allreduce(local_max_ux, op=MPI.MAX)
+        reaction_force_x = compute_reaction_force_x(domain, u, E, nu, control_facets)
 
     log.info("postprocess: max top u_x = %.9e m", max_ux)
     log.info("postprocess: reaction force x = %.9e N", reaction_force_x)
