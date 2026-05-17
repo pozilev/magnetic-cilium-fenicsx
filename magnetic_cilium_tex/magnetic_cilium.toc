@@ -1,0 +1,31 @@
+\babel@toc {russian}{}\relax 
+\contentsline {section}{ВВЕДЕНИЕ}{3}{section*.1}%
+\contentsline {section}{\numberline {1}Аналитический обзор литературы}{6}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Магнитные ресничные сенсоры}{6}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Механическое конечно-элементное моделирование}{7}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Метод Ньютона в нелинейном конечно-элементном расчете}{11}{subsection.1.3}%
+\contentsline {subsection}{\numberline {1.4}Метод магнитных диполей}{13}{subsection.1.4}%
+\contentsline {subsection}{\numberline {1.5}Датчик Холла}{16}{subsection.1.5}%
+\contentsline {subsection}{\numberline {1.6}Магнитостатическое конечно-элементное моделирование}{18}{subsection.1.6}%
+\contentsline {section}{\numberline {2}Математическая постановка задачи механического деформирования реснички}{20}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Геометрия расчетной области}{20}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Кинематика конечных деформаций}{22}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Материальная модель}{24}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Сильная и слабая формы равновесия}{27}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.5}Граничные условия}{29}{subsection.2.5}%
+\contentsline {subsection}{\numberline {2.6}Конечно-элементная дискретизация и решение}{31}{subsection.2.6}%
+\contentsline {subsection}{\numberline {2.7}Вычисление реакции}{34}{subsection.2.7}%
+\contentsline {section}{\numberline {3}Реализация магнитной модели}{36}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Построение дипольных и конечно-элементной магнитных моделей}{36}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Сравнение расчетного магнитного отклика с экспериментом}{38}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Выводы по магнитной реализации}{41}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Валидация механической модели и анализ расчетных результатов}{43}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Общая логика валидации}{43}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Проверка сетки и геометрических объемов}{43}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Проверка сходимости метода Ньютона}{45}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Проверка физической корректности деформации}{45}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}Сопоставление с экспериментальным уровнем силы}{46}{subsection.4.5}%
+\contentsline {subsection}{\numberline {4.6}Итоговая валидационная оценка}{47}{subsection.4.6}%
+\contentsline {section}{ЗАКЛЮЧЕНИЕ}{48}{section*.20}%
+\contentsline {section}{СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ}{49}{section*.21}%
+\contentsline {section}{ПРИЛОЖЕНИЕ А}{52}{section*.22}%
