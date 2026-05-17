@@ -397,7 +397,10 @@ def plot_magnetization_hall_if_requested(results: List[Dict[str, Any]], outdir: 
     if not enabled:
         return
     try:
-        from magnetic_cilium.visualization.magnetics import plot_magnetization_hall_schematic
+        from magnetic_cilium.visualization.magnetics import (
+            plot_magnetization_angle_zoom,
+            plot_magnetization_hall_schematic,
+        )
     except ModuleNotFoundError as exc:
         log.warning("magnetics: Hall/magnetization schematic skipped: missing dependency %s", exc.name)
         return
@@ -415,6 +418,11 @@ def plot_magnetization_hall_if_requested(results: List[Dict[str, Any]], outdir: 
             png_path, svg_path = plot_magnetization_hall_schematic(result, base)
             result["magnetization_hall_png"] = png_path
             result["magnetization_hall_svg"] = svg_path
+            angle_base = os.path.join(figures_dir, f"magnetization_angle_zoom_{mode}_{model}")
+            angle_paths = plot_magnetization_angle_zoom(result, angle_base)
+            if angle_paths is not None:
+                result["magnetization_angle_zoom_png"] = angle_paths[0]
+                result["magnetization_angle_zoom_svg"] = angle_paths[1]
         except Exception as exc:
             log.warning("magnetics: Hall/magnetization schematic skipped for model=%s: %s", model, exc)
 

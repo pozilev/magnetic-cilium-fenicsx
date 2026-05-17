@@ -388,7 +388,7 @@ def plot_magnetization_hall_schematic(result: Mapping[str, Any], output_base_pat
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from matplotlib.patches import Arc, Polygon, Rectangle
+    from matplotlib.patches import Polygon, Rectangle
 
     png_path = output_base_path + ".png"
     svg_path = output_base_path + ".svg"
@@ -434,17 +434,8 @@ def plot_magnetization_hall_schematic(result: Mapping[str, Any], output_base_pat
         arrow_len = 0.15 * raw_span
 
     arrow_end_points = dipole_points + dipole_dirs * arrow_len
-    sensor_normal = _unit([
-        _float_value(result, "sensor_normal_unit_x", 0.0),
-        _float_value(result, "sensor_normal_unit_y", 0.0),
-        _float_value(result, "sensor_normal_unit_z", 1.0),
-    ])
-    angle_origin = dipole_points[0]
-    normal_end = angle_origin + sensor_normal * arrow_len
     x_values.extend(arrow_end_points[:, 0].tolist())
     z_values.extend(arrow_end_points[:, 2].tolist())
-    x_values.append(float(normal_end[0]))
-    z_values.append(float(normal_end[2]))
     z_values.append(sensor[1] - 0.12 * raw_span)
 
     span = max(max(x_values) - min(x_values), max(z_values) - min(z_values), 1.0e-6)
@@ -530,80 +521,15 @@ def plot_magnetization_hall_schematic(result: Mapping[str, Any], output_base_pat
             zorder=6,
         )
 
-    normal_len = arrow_len
-    normal_end = angle_origin + sensor_normal * normal_len
-    ax.plot(
-        [angle_origin[0] * scale, normal_end[0] * scale],
-        [angle_origin[2] * scale, normal_end[2] * scale],
-        color="#15803d",
-        linewidth=2.0,
-        linestyle=(0, (4, 3)),
-        label="нормаль датчика (+z)",
-        zorder=7,
-    )
-    ax.scatter(
-        normal_end[0] * scale,
-        normal_end[2] * scale,
-        marker="^",
-        s=42,
-        color="#15803d",
-        zorder=8,
-    )
-
-    angle_dir = _unit(dipole_dirs[0], fallback=sensor_normal)
-    normal_xz = _unit([sensor_normal[0], sensor_normal[2]], fallback=[0.0, 1.0])
-    moment_xz = _unit([angle_dir[0], angle_dir[2]], fallback=[0.0, 1.0])
-    normal_angle = float(np.rad2deg(np.arctan2(normal_xz[1], normal_xz[0])))
-    moment_angle = float(np.rad2deg(np.arctan2(moment_xz[1], moment_xz[0])))
-    delta_angle = ((moment_angle - normal_angle + 180.0) % 360.0) - 180.0
-    angle_value = _float_value(
-        result,
-        "dipole_magnetization_angle_to_normal_mean_deg",
-        _float_value(result, "theta_mu_to_global_z_mean_deg", _angle_between_vectors_deg(angle_dir, sensor_normal)),
-    )
-    arc_radius = min(0.085 * span, 0.70 * normal_len) * scale
-    if arc_radius > 0.0 and abs(delta_angle) > 0.35:
-        theta1 = normal_angle
-        theta2 = normal_angle + delta_angle
-        if theta2 < theta1:
-            theta1, theta2 = theta2, theta1
-        ax.add_patch(
-            Arc(
-                (angle_origin[0] * scale, angle_origin[2] * scale),
-                2.0 * arc_radius,
-                2.0 * arc_radius,
-                angle=0.0,
-                theta1=theta1,
-                theta2=theta2,
-                color="#15803d",
-                linewidth=1.5,
-                zorder=8,
-            )
-        )
-    label_angle = normal_angle + 0.5 * delta_angle if abs(delta_angle) > 0.35 else normal_angle - 28.0
-    label_angle_rad = np.deg2rad(label_angle)
-    label_radius = max(arc_radius * 1.45, 0.05 * span * scale)
-    ax.text(
-        angle_origin[0] * scale + np.cos(label_angle_rad) * label_radius,
-        angle_origin[2] * scale + np.sin(label_angle_rad) * label_radius,
-        f"θμ к нормали = {angle_value:.1f}°",
-        color="#15803d",
-        ha="left",
-        va="center",
-        fontsize=9,
-        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 1.2},
-        zorder=9,
-    )
-
     field_start = np.mean(dipole_points, axis=0)
     ax.arrow(
         field_start[0] * scale,
         field_start[2] * scale,
         (sensor[0] - field_start[0]) * scale,
         (sensor[1] - field_start[2]) * scale,
-        width=0.0052 * span * scale,
-        head_width=0.052 * span * scale,
-        head_length=0.07 * span * scale,
+        width=0.0018 * span * scale,
+        head_width=0.026 * span * scale,
+        head_length=0.040 * span * scale,
         color="#2563eb",
         alpha=0.95,
         linestyle="-",
@@ -662,5 +588,146 @@ def plot_magnetization_hall_schematic(result: Mapping[str, Any], output_base_pat
     fig.tight_layout(rect=(0.0, 0.0, 0.64, 1.0))
     fig.savefig(png_path, bbox_inches="tight", pad_inches=0.15)
     fig.savefig(svg_path, bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
+    return png_path, svg_path
+
+
+def plot_magnetization_angle_zoom(
+    result: Mapping[str, Any],
+    output_base_path: str,
+    *,
+    angle_threshold_deg: float = 1.0e-6,
+) -> tuple[str, str] | None:
+    """Save a zoomed Russian-labeled angle schematic for nonzero M-to-normal angles."""
+    import os
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Arc
+
+    geometry = _load_visual_geometry(result)
+    dipole_points, dipole_dirs = _dipole_vectors_for_plot(result, geometry)
+    fallback_dir = _unit(np.mean(dipole_dirs, axis=0), fallback=[0.0, 0.0, 1.0])
+    moment_dir = _unit(
+        [
+            _float_value(result, "magnetization_mean_unit_x", fallback_dir[0]),
+            _float_value(result, "magnetization_mean_unit_y", fallback_dir[1]),
+            _float_value(result, "magnetization_mean_unit_z", fallback_dir[2]),
+        ],
+        fallback=fallback_dir,
+    )
+    sensor_normal = _unit(
+        [
+            _float_value(result, "sensor_normal_unit_x", 0.0),
+            _float_value(result, "sensor_normal_unit_y", 0.0),
+            _float_value(result, "sensor_normal_unit_z", 1.0),
+        ],
+        fallback=[0.0, 0.0, 1.0],
+    )
+    angle_value = _float_value(
+        result,
+        "dipole_magnetization_angle_to_normal_mean_deg",
+        _float_value(result, "theta_mu_to_global_z_mean_deg", _angle_between_vectors_deg(moment_dir, sensor_normal)),
+    )
+    if abs(angle_value) <= angle_threshold_deg:
+        return None
+
+    origin = np.asarray(
+        [
+            _float_value(result, "magnetization_moment_center_x_m", float(np.mean(dipole_points[:, 0]))),
+            _float_value(result, "magnetization_moment_center_y_m", float(np.mean(dipole_points[:, 1]))),
+            _float_value(result, "magnetization_moment_center_z_m", float(np.mean(dipole_points[:, 2]))),
+        ],
+        dtype=float,
+    )
+
+    png_path = output_base_path + ".png"
+    svg_path = output_base_path + ".svg"
+    os.makedirs(os.path.dirname(png_path) or ".", exist_ok=True)
+
+    scale = 1.0e6
+    vector_len = 520.0e-6
+    normal_end = origin + sensor_normal * vector_len
+    moment_end = origin + moment_dir * vector_len
+
+    normal_xz = _unit([sensor_normal[0], sensor_normal[2]], fallback=[0.0, 1.0])
+    moment_xz = _unit([moment_dir[0], moment_dir[2]], fallback=[0.0, 1.0])
+    normal_angle = float(np.rad2deg(np.arctan2(normal_xz[1], normal_xz[0])))
+    moment_angle = float(np.rad2deg(np.arctan2(moment_xz[1], moment_xz[0])))
+    delta_angle = ((moment_angle - normal_angle + 180.0) % 360.0) - 180.0
+
+    fig, ax = plt.subplots(figsize=(7.2, 5.8), dpi=180)
+    ax.set_aspect("equal", adjustable="box")
+    ax.scatter(origin[0] * scale, origin[2] * scale, s=28, color="#111827", zorder=5)
+    ax.plot(
+        [origin[0] * scale, normal_end[0] * scale],
+        [origin[2] * scale, normal_end[2] * scale],
+        color="#15803d",
+        linewidth=2.0,
+        linestyle=(0, (4, 3)),
+        label="нормаль датчика (+z)",
+        zorder=4,
+    )
+    ax.scatter(normal_end[0] * scale, normal_end[2] * scale, marker="^", s=54, color="#15803d", zorder=5)
+    ax.arrow(
+        origin[0] * scale,
+        origin[2] * scale,
+        (moment_end[0] - origin[0]) * scale,
+        (moment_end[2] - origin[2]) * scale,
+        width=0.006 * vector_len * scale,
+        head_width=0.06 * vector_len * scale,
+        head_length=0.08 * vector_len * scale,
+        color="#b21f2d",
+        length_includes_head=True,
+        label="вектор намагниченности",
+        zorder=6,
+    )
+
+    arc_radius = 0.40 * vector_len * scale
+    theta1 = normal_angle
+    theta2 = normal_angle + delta_angle
+    if theta2 < theta1:
+        theta1, theta2 = theta2, theta1
+    ax.add_patch(
+        Arc(
+            (origin[0] * scale, origin[2] * scale),
+            2.0 * arc_radius,
+            2.0 * arc_radius,
+            angle=0.0,
+            theta1=theta1,
+            theta2=theta2,
+            color="#15803d",
+            linewidth=2.3,
+            zorder=7,
+        )
+    )
+    label_angle = normal_angle + 0.5 * delta_angle
+    label_radius = 1.34 * arc_radius
+    label_angle_rad = np.deg2rad(label_angle)
+    ax.text(
+        origin[0] * scale + np.cos(label_angle_rad) * label_radius,
+        origin[2] * scale + np.sin(label_angle_rad) * label_radius,
+        f"θμ к нормали = {angle_value:.2f}°",
+        color="#15803d",
+        ha="left",
+        va="center",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.78, "pad": 1.4},
+    )
+
+    model = str(result.get("magnetization_model", ""))
+    mode = str(result.get("dipole_mode", ""))
+    ax.set_title(f"Угол намагниченности к нормали датчика\nмодель: {model}, диполи: {mode}")
+    ax.set_xlabel("x, мкм")
+    ax.set_ylabel("z, мкм")
+    ax.grid(True, color="#d1d5db", linewidth=0.6, alpha=0.7)
+    x_points = [origin[0], normal_end[0], moment_end[0]]
+    z_points = [origin[2], normal_end[2], moment_end[2]]
+    margin = 0.25 * vector_len
+    ax.set_xlim((min(x_points) - margin) * scale, (max(x_points) + 2.3 * margin) * scale)
+    ax.set_ylim((min(z_points) - margin) * scale, (max(z_points) + margin) * scale)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=True)
+    fig.tight_layout(rect=(0.0, 0.0, 0.76, 1.0))
+    fig.savefig(png_path, bbox_inches="tight", pad_inches=0.12)
+    fig.savefig(svg_path, bbox_inches="tight", pad_inches=0.12)
     plt.close(fig)
     return png_path, svg_path
