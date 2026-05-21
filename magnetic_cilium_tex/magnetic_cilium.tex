@@ -251,7 +251,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Процесс изготовления.png}
-    \caption{Экспериментальная идея ресничного микросенсора \cite{man2023}}
+    \caption{Экспериментальная идея ресничного микросенсора \cite{man2023}.}
     \label{fig:experimental_ciliary_sensor}
 \end{figure}
 
@@ -273,7 +273,7 @@
         U_{x,i}\\
         U_{y,i}\\
         U_{z,i}
-    \end{pmatrix}.
+    \end{pmatrix},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(U_{x,i},U_{y,i},U_{z,i}\)}{перемещения i-того узла вдоль осей \(x\), \(y\), \(z\).}
@@ -284,7 +284,7 @@
     \mathbf{u}_h(\mathbf{X})
     =
     \sum_{i=1}^{N}
-    \mathbf{U}_i\varphi_i(\mathbf{X}).
+    \mathbf{U}_i\varphi_i(\mathbf{X}),
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{u}_h\)}{конечно-элементное приближение вектора перемещений;}
@@ -303,7 +303,7 @@
     \mathbf{P}(\mathbf{u}):\nabla\mathbf{v}\,dV
     =
     \int_{\Gamma_t}
-    \bar{\mathbf{t}}\cdot\mathbf{v}\,dS.
+    \bar{\mathbf{t}}\cdot\mathbf{v}\,dS,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Omega\)}{расчетная область в исходной конфигурации;}
@@ -317,7 +317,7 @@
 
 После подстановки конечно-элементного приближения получается система нелинейных алгебраических уравнений:
 \begin{equation}
-    \mathbf{R}(\mathbf{U})=\mathbf{0}.
+    \mathbf{R}(\mathbf{U})=\mathbf{0},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{R}\)}{вектор невязки, то есть мера нарушения равновесия в узлах;}
@@ -341,7 +341,7 @@
 
 При малых деформациях и линейном материальном законе конечно-элементная постановка приводит к системе линейных алгебраических уравнений. Для мягкой реснички такой подход недостаточен. В задаче присутствуют конечные перемещения, геометрическая нелинейность и гиперупругая энергия, зависящая от градиента деформации. После дискретизации получается нелинейная система
 \begin{equation}
-    \mathbf{R}(\mathbf{U})=\mathbf{0}.
+    \mathbf{R}(\mathbf{U})=\mathbf{0},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{R}\)}{вектор невязки равновесия;}
@@ -362,7 +362,7 @@
     \mathbf{K}_T(\mathbf{U}_k)
     =
     \frac{\partial \mathbf{R}}{\partial \mathbf{U}}
-    \bigg|_{\mathbf{U}=\mathbf{U}_k}.
+    \bigg|_{\mathbf{U}=\mathbf{U}_k},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{K}_T\)}{касательная матрица жесткости, или якобиан нелинейной системы;}
@@ -434,7 +434,7 @@
         \frac{\mathbf{m}}{\left|\mathbf{r}\right|^3}
     \right],
     \qquad
-    \mathbf{r}=\mathbf{x}-\mathbf{x}_0.
+    \mathbf{r}=\mathbf{x}-\mathbf{x}_0,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{B}\)}{магнитная индукция;}
@@ -477,7 +477,7 @@
         \frac{\mathbf{m}_i}{\left|\mathbf{r}_i\right|^3}
     \right],
     \qquad
-    \mathbf{r}_i=\mathbf{x}-\mathbf{x}_i.
+    \mathbf{r}_i=\mathbf{x}-\mathbf{x}_i,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(N_d\)}{число диполей;}
@@ -531,7 +531,7 @@
 \begin{equation}
     \mathbf{M}_i^{\,\mathrm{def}}
     =
-    \mathbf{R}_i\mathbf{M}_0.
+    \mathbf{R}_i\mathbf{M}_0,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{R}_i\)}{локальный тензор поворота;}
@@ -558,7 +558,7 @@
     \centering
     % \placeholderfigure{Место для рисунка: схема замены магнитного слоя набором диполей. Можно использовать идею со слайда 10 презентации «Магнитная дипольная модель» и дополнить ее тремя вариантами: один торцевой диполь, восемь распределенных диполей и тетраэдральная дипольная модель.}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/магнитные диполи.png}
-    \caption{Схема дипольных приближений магнитного слоя}
+    \caption{Схема дипольных приближений магнитного слоя.}
     \label{fig:dipole_models_scheme}
 \end{figure}
 
@@ -570,7 +570,7 @@
 \begin{equation}
     V_H
     =
-    \frac{I_s B}{n e d}.
+    \frac{I_s B}{n e d},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(V_H\)}{холловское напряжение;}
@@ -593,7 +593,7 @@
     \centering
     % \placeholderfigure{Место для рисунка: устройство датчика Холла. Следует показать холловскую пластину, ток \(I_s\), магнитное поле \(B\), поперечное напряжение \(V_H\), а также расположение датчика под магнитной ресничкой.}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Сенсор Холла.png}
-    \caption{Принцип работы датчика Холла в магнитном ресничном сенсоре}
+    \caption{Принцип работы датчика Холла в магнитном ресничном сенсоре.}
     \label{fig:hall_sensor_scheme}
 \end{figure}
 
@@ -645,7 +645,7 @@
 Рассматривается трехмерная модель двухсегментной цилиндрической реснички, закрепленной на цилиндрической подложке. Расчетная область задается как объединение трех подобластей:
 \begin{equation}
     \Omega =
-    \Omega_s \cup \Omega_1 \cup \Omega_2.
+    \Omega_s \cup \Omega_1 \cup \Omega_2,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Omega_s\)}{подложка из PDMS;}
@@ -664,7 +664,7 @@
 \begin{equation}
     L_1=2\cdot10^{-3}\,\text{м},
     \qquad
-    L_2=2\cdot10^{-3}\,\text{м}.
+    L_2=2\cdot10^{-3}\,\text{м},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(L_1\)}{длина нижнего, немагнитного слоя PDMS;}
@@ -713,7 +713,7 @@
     \centering
     % \placeholderfigure{Место для рисунка из презентации: слайд 4, рисунок «Структура сенсора» и таблицы геометрии/материалов. Здесь уместно показать подложку, нижний слой PDMS и верхний магнитный композитный слой с размерами \(D\), \(L_1\), \(L_2\), \(R_s\), \(H_s\).}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Геометрия реснички.png}
-    \caption{Геометрическая структура двухсегментной магнитной реснички}
+    \caption{Геометрическая структура двухсегментной магнитной реснички.}
     \label{fig:geometry_from_presentation}
 \end{figure}
 
@@ -731,7 +731,7 @@
         u_z(\mathbf{X})
     \end{pmatrix},
     \qquad
-    \mathbf{X}\in\Omega.
+    \mathbf{X}\in\Omega,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{u}\)}{вектор перемещения материальной точки;}
@@ -745,7 +745,7 @@
     =
     \boldsymbol{\varphi}(\mathbf{X})
     =
-    \mathbf{X}+\mathbf{u}(\mathbf{X}).
+    \mathbf{X}+\mathbf{u}(\mathbf{X}),
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{x}\)}{положение той же материальной точки после деформации;}
@@ -760,7 +760,7 @@
     =
     \mathbf{I}
     +
-    \nabla_{\mathbf{X}}\mathbf{u}.
+    \nabla_{\mathbf{X}}\mathbf{u},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{G}\)}{градиент деформации;}
@@ -777,7 +777,7 @@
 
 Для описания растяжений вводится правый тензор Коши--Грина:
 \begin{equation}
-    \mathbf{C}=\mathbf{G}^{T}\mathbf{G}.
+    \mathbf{C}=\mathbf{G}^{T}\mathbf{G},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{C}\)}{правый тензор Коши--Грина;}
@@ -788,7 +788,7 @@
 
 Следующая важная величина --- якобиан деформации:
 \begin{equation}
-    J=\det\mathbf{G}.
+    J=\det\mathbf{G},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(J\)}{относительное изменение локального объема;}
@@ -803,7 +803,7 @@
     \centering
     % \placeholderfigure{Место для рисунка из презентации: слайд 5, рисунок «Кинематика конечных деформаций». Рекомендуется показать переход \(\mathbf{X}\rightarrow\mathbf{x}\), вектор перемещения \(\mathbf{u}\), малый отрезок \(d\mathbf{X}\) и его образ \(d\mathbf{x}\).}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Кинематика.png}
-    \caption{Кинематика конечных деформаций}
+    \caption{Кинематика конечных деформаций.}
     \label{fig:finite_deformation_kinematics}
 \end{figure}
 
@@ -824,7 +824,7 @@
     -
     \mu\ln J
     +
-    \frac{\lambda}{2}(\ln J)^2.
+    \frac{\lambda}{2}(\ln J)^2,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\psi\)}{плотность энергии деформации;}
@@ -841,7 +841,7 @@
 \end{equation}
 \begin{equation}
     \lambda=
-    \frac{E\nu}{(1+\nu)(1-2\nu)}.
+    \frac{E\nu}{(1+\nu)(1-2\nu)},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(E\)}{модуль Юнга, характеризующий жесткость материала при растяжении;}
@@ -858,7 +858,7 @@
     \begin{cases}
         E_{\mathrm{PDMS}}, & \mathbf{X}\in \Omega_s \cup \Omega_1,\\
         E_{\mathrm{mag}}, & \mathbf{X}\in \Omega_2,
-    \end{cases}.
+    \end{cases}
 \end{equation}
 \begin{whereblock}
 \whereitem{\(E_{\mathrm{PDMS}}\)}{модуль Юнга подложки и нижнего PDMS-слоя;}
@@ -868,8 +868,8 @@
     \nu(\mathbf{X}) =
     \begin{cases}
         \nu_{\mathrm{PDMS}}, & \mathbf{X}\in \Omega_s \cup \Omega_1,\\
-        \nu_{\mathrm{mag}}, & \mathbf{X}\in \Omega_2.
-    \end{cases}.
+        \nu_{\mathrm{mag}}, & \mathbf{X}\in \Omega_2,
+    \end{cases}
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\nu_{\mathrm{PDMS}}\)}{коэффициент Пуассона PDMS;}
@@ -892,7 +892,7 @@
 \begin{equation}
     \mathbf{P}
     =
-    \frac{\partial\psi}{\partial\mathbf{F}}.
+    \frac{\partial\psi}{\partial\mathbf{F}},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{P}\)}{первый тензор напряжений Пиолы--Кирхгофа;}
@@ -910,7 +910,7 @@
         \mathbf{F}-\mathbf{F}^{-\mathrm{T}}
     \right)
     +
-    \lambda\ln J\,\mathbf{F}^{-\mathrm{T}}.
+    \lambda\ln J\,\mathbf{F}^{-\mathrm{T}},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{F}^{-\mathrm{T}}\)}{обратный транспонированный градиент деформации;}
@@ -926,7 +926,7 @@
 \begin{equation}
     \operatorname{Div}\mathbf{P}=\mathbf{0}
     \qquad
-    \text{в }\Omega.
+    \text{в }\Omega,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\operatorname{Div}\)}{дивергенция по исходным координатам;}
@@ -941,7 +941,7 @@
     \Pi(\mathbf{u})
     =
     \int_{\Omega}
-    \psi(\mathbf{F}(\mathbf{u}))\,dV.
+    \psi(\mathbf{F}(\mathbf{u}))\,dV,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Pi\)}{полная потенциальная энергия деформации;}
@@ -951,7 +951,7 @@
 
 Равновесное состояние определяется условием
 \begin{equation}
-    \delta\Pi(\mathbf{u};\mathbf{v})=0.
+    \delta\Pi(\mathbf{u};\mathbf{v})=0,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\delta\Pi\)}{первая вариация энергии, то есть изменение энергии при малом виртуальном смещении;}
@@ -963,7 +963,7 @@
     \int_{\Omega}
     \mathbf{P}(\mathbf{u}):\nabla\mathbf{v}\,dV
     =
-    0.
+    0,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(:\)}{двойное скалярное произведение тензоров;}
@@ -976,7 +976,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Равновесие.png}
-    \caption{Переход от локального равновесия к слабой форме}
+    \caption{Переход от локального равновесия к слабой форме.}
     \label{fig:equilibrium_weak_form}
 \end{figure}
 
@@ -991,7 +991,7 @@
     \left\{
     (x,y,z)\in\partial\Omega:
     z=-H_s
-    \right\}.
+    \right\},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Gamma_{\mathrm{bottom}}\)}{нижняя поверхность подложки;}
@@ -1002,7 +1002,7 @@
 \begin{equation}
     \mathbf{u}=\mathbf{0}
     \qquad
-    \text{на }\Gamma_{\mathrm{bottom}}.
+    \text{на }\Gamma_{\mathrm{bottom}},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{u}=\mathbf{0}\)}{запрет перемещений по всем трем направлениям.}
@@ -1022,7 +1022,7 @@
 \begin{equation}
     u_x=\delta_x
     \qquad
-    \text{на }\Gamma_{\mathrm{top}}.
+    \text{на }\Gamma_{\mathrm{top}},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Gamma_{\mathrm{top}}\)}{верхняя торцевая грань магнитного слоя;}
@@ -1042,7 +1042,7 @@
 \begin{equation}
     \mathbf{P}\mathbf{N}=\mathbf{0}
     \qquad
-    \text{на }\Gamma_{\mathrm{free}}.
+    \text{на }\Gamma_{\mathrm{free}},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{N}\)}{внешняя нормаль к границе в исходной конфигурации;}
@@ -1055,7 +1055,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Граничные условия.png}
-    \caption{Граничные условия механической задачи}
+    \caption{Граничные условия механической задачи.}
     \label{fig:boundary_conditions_from_presentation}
 \end{figure}
 
@@ -1065,7 +1065,7 @@
 \begin{equation}
     \Omega_h
     =
-    \bigcup_{K\in\mathcal{T}_h}K.
+    \bigcup_{K\in\mathcal{T}_h}K,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\Omega_h\)}{конечно-элементное приближение расчетной области;}
@@ -1080,7 +1080,7 @@
 \begin{equation}
     h_{\mathrm{cil}}=20~\text{мкм},
     \qquad
-    h_{\mathrm{sub}}=100~\text{мкм}.
+    h_{\mathrm{sub}}=100~\text{мкм},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(h_{\mathrm{cil}}\)}{характерный размер элемента в ресничке;}
@@ -1101,7 +1101,7 @@
     \mathbf{u}_h(\mathbf{X})
     =
     \sum_{i=1}^{N}
-    \mathbf{U}_i\varphi_i(\mathbf{X}).
+    \mathbf{U}_i\varphi_i(\mathbf{X}),
 \end{equation}
 \begin{whereblock}
 \whereitem{\(p\)}{степень полиномиальной аппроксимации на элементе;}
@@ -1113,7 +1113,7 @@
 
 В финальной конфигурации используется квадратичный элемент:
 \begin{equation}
-    p=2.
+    p=2,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(p=2\)}{квадратичная аппроксимация, то есть элемент \(P_2\).}
@@ -1123,7 +1123,7 @@
 
 После подстановки аппроксимации в слабую форму получается нелинейная система:
 \begin{equation}
-    \mathbf{R}(\mathbf{U})=\mathbf{0}.
+    \mathbf{R}(\mathbf{U})=\mathbf{0},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{R}(\mathbf{U})\)}{глобальная невязка равновесия после сборки вкладов всех элементов;}
@@ -1136,7 +1136,7 @@
 \begin{equation}
     N_{\mathrm{steps}}=10,
     \qquad
-    \delta_x=0,55~\text{мм}.
+    \delta_x=0,55~\text{мм},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(N_{\mathrm{steps}}\)}{число шагов нагружения;}
@@ -1148,7 +1148,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.3\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/сетка.png}
-    \caption{Тетраэдральная сетка механической модели}
+    \caption{Тетраэдральная сетка механической модели.}
     \label{fig:mechanical_mesh}
 \end{figure}
 
@@ -1158,7 +1158,7 @@
 
 Поверхностная тяга в лагранжевой постановке:
 \begin{equation}
-    \mathbf{t}=\mathbf{P}\mathbf{N}.
+    \mathbf{t}=\mathbf{P}\mathbf{N},
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{t}\)}{вектор поверхностной тяги;}
@@ -1173,7 +1173,7 @@
     \left|
     \int_{\Gamma_{\mathrm{top}}}
     (\mathbf{P}\mathbf{N})\cdot\mathbf{e}_x\,dS
-    \right|.
+    \right|,
 \end{equation}
 \begin{whereblock}
 \whereitem{\(F_x\)}{модуль силы реакции вдоль направления заданного смещения;}
@@ -1188,7 +1188,7 @@
     \centering
     % \placeholderfigure{Место для рисунка из презентации: слайд 9, рисунок «Механическая реакция структуры реснички при заданном смещении». В тексте диплома этот рисунок лучше использовать как сопоставление реакции с экспериментальным диапазоном сил.}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/source/pic/Рекация на смещение.png}
-    \caption{Расчет силы реакции при заданном смещении верхней грани}
+    \caption{Расчет силы реакции при заданном смещении верхней грани.}
     \label{fig:reaction_force_from_presentation}
 \end{figure}
 
@@ -1214,7 +1214,7 @@
     =
     \mathbf{B}_{1}(\mathbf{x}_{\mathrm{H}})
     -
-    \mathbf{B}_{0}(\mathbf{x}_{\mathrm{H}}).
+    \mathbf{B}_{0}(\mathbf{x}_{\mathrm{H}}),
 \end{equation}
 \begin{whereblock}
 \whereitem{\(\mathbf{B}_{0}\)}{поле до деформации;}
@@ -1289,7 +1289,6 @@
 
 % \begin{figure}[H]
 %     \centering
-%     \placeholderfigure{Место для рисунка: вычислительная схема магнитной постобработки. Рекомендуется показать цепочку: механический МКЭ \(\rightarrow\) деформированная сетка \(\rightarrow\) дипольная модель \(\rightarrow\) \(\Delta\mathbf{B}\) в точке датчика Холла.}
 %     \caption{Схема реализации магнитной модели}
 %     \label{fig:magnetic_pipeline_scheme}
 % \end{figure}
@@ -1300,7 +1299,7 @@
 
 \begin{table}[H]
 \centering
-\caption{Основные результаты механического расчета}
+\caption{Основные результаты механического расчета.}
 \label{tab:baseline_mechanics}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}|p{0.58\textwidth}|c|}
 \hline
@@ -1357,7 +1356,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/results/experiment_baseline/visual_report/figures/deltaB_components.png}
-    \caption{Компоненты изменения магнитного поля в точке датчика Холла}
+    \caption{Компоненты изменения магнитного поля в точке датчика Холла.}
     \label{fig:deltaB_components}
 \end{figure}
 
@@ -1365,7 +1364,7 @@
 
 \begin{table}[H]
 \centering
-\caption{Сравнение трех дипольных моделей при \(B_r=0,25~\text{Тл}\)}
+\caption{Сравнение трех дипольных моделей при \(B_r=0,25~\text{Тл}\).}
 \label{tab:dipole_comparison}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}|>{\raggedright\arraybackslash}p{0.32\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|>{\centering\arraybackslash}p{0.13\textwidth}|}
 \hline
@@ -1407,7 +1406,7 @@
 
 \begin{table}[H]
 \centering
-\caption{Сравнение магнитных моделей}
+\caption{Сравнение магнитных моделей.}
 \label{tab:magnetic_experiment_comparison}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}|>{\raggedright\arraybackslash}p{0.36\textwidth}|c|c|c|}
 \hline
@@ -1514,7 +1513,7 @@
     \centering
     % \placeholderfigure{Место для рисунка: деформированная форма реснички. Рекомендуемые файлы: \path{deformed_shape_overview.png} или \path{deformed_shape_closeup.png} из визуального отчета \path{experiment_baseline}.}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/results/experiment_baseline/visual_report/figures/deformed_shape_closeup.png}
-    \caption{Деформированная форма реснички в финальном расчете}
+    \caption{Деформированная форма реснички в финальном расчете.}
     \label{fig:deformed_shape}
 \end{figure}
 
@@ -1524,7 +1523,7 @@
 
 \begin{table}[H]
 \centering
-\caption{Фрагмент истории пошагового механического расчета}
+\caption{Фрагмент истории пошагового механического расчета.}
 \label{tab:newton_history}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}|c|c|c|c|}
 \hline
@@ -1542,7 +1541,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/results/experiment_baseline/final_P2_hcil_20um_hsub_100um_delta_0p550mm/mechanics_force_displacement.png}
-    \caption{Зависимость силы реакции от заданного смещения по данным пошагового механического расчета}
+    \caption{Зависимость силы реакции от заданного смещения по данным пошагового механического расчета.}
     \label{fig:mechanics_force_displacement}
 \end{figure}
 
@@ -1574,7 +1573,7 @@
     \centering
     % \placeholderfigure{Место для рисунка: распределение \(J\) и напряжений по Мизесу. Можно использовать \texttt{jacobian\_J\_overview.png}, \texttt{jacobian\_J\_base\_zoom.png}, \texttt{von\_mises\_overview.png} и \texttt{von\_mises\_base\_zoom.png}.}
     \includegraphics[width=1\textwidth]{/home/pie/programming/magnetic_clilium/results/experiment_baseline/visual_report/figures/jacobian_J_base_zoom.png}
-    \caption{Поля якобиана деформации и эквивалентных напряжений}
+    \caption{Поля якобиана деформации и эквивалентных напряжений.}
     \label{fig:mechanics_fields}
 \end{figure}
 
